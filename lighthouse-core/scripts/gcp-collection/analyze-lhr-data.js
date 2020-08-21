@@ -12,7 +12,7 @@ const { join } = require('path');
 
 const directory = process.argv[2];
 const audit = process.argv[3];
-if (!directory) throw new Error('No directory provided');
+if (!directory) throw new Error('No directory provided\nUsage: $0 <lhr directory> <audit id>');
 
 if (!audit) throw new Error('No audit provided');
 
@@ -36,7 +36,7 @@ for (const dir of urlDirs) {
   for (const run of runs) {
     if (run.name === '.DS_Store') continue;
 
-    if (!run.isDirectory()) throw new Error('Unexpected file encountered');
+    if (!run.isDirectory()) throw new Error(`Unexpected directory "${run.name}" encountered`);
 
     const lhrPath = join(path, run.name, 'lhr.json');
     console.log(lhrPath);
@@ -74,7 +74,7 @@ const results = {
   summary: {
     passes: totalPass,
     fails: totalFail,
-    failingAudits: Array.from(failSet),
+    failingUrls: Array.from(failSet),
   },
   runResults,
 }
