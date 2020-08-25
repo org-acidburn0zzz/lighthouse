@@ -1672,31 +1672,52 @@
           {
             "key": "entity",
             "itemType": "link",
-            "text": "Third-Party"
+            "text": "Third-Party",
+            "subItemsHeading": {
+              "key": "url",
+              "itemType": "url"
+            }
           },
           {
             "key": "transferSize",
             "granularity": 1,
             "itemType": "bytes",
-            "text": "Transfer Size"
+            "text": "Transfer Size",
+            "subItemsHeading": {
+              "key": "transferSize"
+            }
           },
           {
             "key": "blockingTime",
             "granularity": 1,
             "itemType": "ms",
-            "text": "Main-Thread Blocking Time"
+            "text": "Main-Thread Blocking Time",
+            "subItemsHeading": {
+              "key": "blockingTime"
+            }
           }
         ],
         "items": [
           {
+            "mainThreadTime": 90.36300000000001,
+            "blockingTime": 22.918000000000006,
+            "transferSize": 30174,
             "entity": {
               "type": "link",
               "text": "Google CDN",
               "url": "https://developers.google.com/speed/libraries/"
             },
-            "transferSize": 30174,
-            "mainThreadTime": 90.36300000000001,
-            "blockingTime": 22.918000000000006
+            "subItems": {
+              "type": "subitems",
+              "items": [
+                {
+                  "url": "http://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js",
+                  "mainThreadTime": 90.36300000000001,
+                  "blockingTime": 22.918000000000006,
+                  "transferSize": 30174
+                }
+              ]
+            }
           }
         ],
         "summary": {
@@ -1879,7 +1900,7 @@
     "non-composited-animations": {
       "id": "non-composited-animations",
       "title": "Avoid non-composited animations",
-      "description": "Animations which are not composited can be janky and contribute to CLS. [Learn more](https://developers.google.com/web/fundamentals/performance/rendering/stick-to-compositor-only-properties-and-manage-layer-count)",
+      "description": "Animations which are not composited can be janky and increase CLS. [Learn more](https://web.dev/non-composited-animations)",
       "score": null,
       "scoreDisplayMode": "informative",
       "displayValue": "1 animated element found",
@@ -1981,6 +2002,18 @@
         "headings": [],
         "items": [],
         "summary": {}
+      }
+    },
+    "valid-source-maps": {
+      "id": "valid-source-maps",
+      "title": "Page has valid source maps",
+      "description": "Source maps translate minified code to the original source code. This helps developers debug in production. In addition, Lighthouse is able to provide further insights. Consider deploying source maps to take advantage of these benefits. [Learn more](https://developers.google.com/web/tools/chrome-devtools/javascript/source-maps).",
+      "score": 1,
+      "scoreDisplayMode": "binary",
+      "details": {
+        "type": "table",
+        "headings": [],
+        "items": []
       }
     },
     "pwa-cross-browser": {
@@ -4825,6 +4858,11 @@
           "id": "errors-in-console",
           "weight": 1,
           "group": "best-practices-general"
+        },
+        {
+          "id": "valid-source-maps",
+          "weight": 0,
+          "group": "best-practices-general"
         }
       ],
       "id": "best-practices",
@@ -5644,6 +5682,12 @@
       {
         "startTime": 0,
         "name": "lh:audit:large-javascript-libraries",
+        "duration": 100,
+        "entryType": "measure"
+      },
+      {
+        "startTime": 0,
+        "name": "lh:audit:valid-source-maps",
         "duration": 100,
         "entryType": "measure"
       },
@@ -6868,12 +6912,18 @@
       "lighthouse-core/audits/largest-contentful-paint-element.js | description": [
         "audits[largest-contentful-paint-element].description"
       ],
-      "lighthouse-core/audits/largest-contentful-paint-element.js | displayValue": [
+      "lighthouse-core/lib/i18n/i18n.js | displayValueElementsFound": [
         {
           "values": {
-            "itemCount": 1
+            "nodeCount": 1
           },
           "path": "audits[largest-contentful-paint-element].displayValue"
+        },
+        {
+          "values": {
+            "nodeCount": 4
+          },
+          "path": "audits[layout-shift-elements].displayValue"
         }
       ],
       "lighthouse-core/lib/i18n/i18n.js | columnElement": [
@@ -6887,14 +6937,6 @@
       ],
       "lighthouse-core/audits/layout-shift-elements.js | description": [
         "audits[layout-shift-elements].description"
-      ],
-      "lighthouse-core/audits/layout-shift-elements.js | displayValue": [
-        {
-          "values": {
-            "nodeCount": 4
-          },
-          "path": "audits[layout-shift-elements].displayValue"
-        }
       ],
       "lighthouse-core/audits/layout-shift-elements.js | columnContribution": [
         "audits[layout-shift-elements].details.headings[1].text"
@@ -6995,6 +7037,12 @@
           },
           "path": "audits[large-javascript-libraries].displayValue"
         }
+      ],
+      "lighthouse-core/audits/valid-source-maps.js | title": [
+        "audits[valid-source-maps].title"
+      ],
+      "lighthouse-core/audits/valid-source-maps.js | description": [
+        "audits[valid-source-maps].description"
       ],
       "lighthouse-core/audits/manual/pwa-cross-browser.js | title": [
         "audits[pwa-cross-browser].title"

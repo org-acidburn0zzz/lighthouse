@@ -9,15 +9,17 @@
   - [Using the Node CLI](#using-the-node-cli)
     * [CLI options](#cli-options)
   - [Using the Node module](#using-the-node-module)
-- [Viewing a report](#viewing-a-report)
-  * [Online Viewer](#online-viewer)
-- [Docs & Recipes](#docs--recipes)
-- [Developing Lighthouse](#develop)
-  * [Setup](#setup)
-  * [Run](#run)
-  * [Tests](#tests)
+  - [Viewing a report](#viewing-a-report)
+    * [Online Viewer](#online-viewer)
+  - [Docs & Recipes](#docs--recipes)
+  - [Developing Lighthouse](#develop)
+    * [Setup](#setup)
+    * [Run](#run)
+    * [Tests](#tests)
+    * [Docs](#docs)
 - Associated Products and Projects
-  - [Lighthouse Integrations](#lighthouse-integrations)
+  - [Lighthouse Integrations in Web Perf services](#lighthouse-integrations-in-web-perf-services)
+  - [Lighthouse Integrations in non-Web Perf services](#lighthouse-integrations-in-non-web-perf-services)
   - [Plugins](#plugins)
   - [Related Projects](#related-projects)
 - [FAQ](#faq)
@@ -388,6 +390,7 @@ Other awesome open source projects that use Lighthouse.
 * **[performance-budgets](https://performance-budgets.netlify.com/)** - Easily assert Lighthouse budgets with Docker.
 * **[pwmetrics](https://github.com/paulirish/pwmetrics/)** - Gather performance metrics
 * **[react-lighthouse-viewer](https://www.npmjs.com/package/react-lighthouse-viewer)** - Render a Lighthouse JSON report in a React Component.
+* **[site-audit-seo](https://github.com/viasite/site-audit-seo)** - CLI tool for SEO site audit, crawl site, lighthouse each page. Output to console and tables in csv, xlsx, json, web or Google Drive.
 * **[webpack-lighthouse-plugin](https://github.com/addyosmani/webpack-lighthouse-plugin)** - Run Lighthouse from a Webpack build.
 * **[is-website-vulnerable](https://github.com/lirantal/is-website-vulnerable)** - An open source Node.js CLI tool that finds publicly known security vulnerabilities in a website's frontend JavaScript libraries.
 * **[cypress-audit](https://github.com/mfrachet/cypress-audit)** - Run Lighthouse and Pa11y audits directly in your E2E test suites.
