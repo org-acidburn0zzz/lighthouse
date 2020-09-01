@@ -7,8 +7,16 @@
  */
 'use strict';
 
+/**
+ * @fileoverview This script takes the directory (of extracted batch LHR data) along with an audit name and generates
+ * a JSON file with aggregated data for that audit.
+ *
+ * USAGE: node lighthouse-core/scripts/gcp-collection/analyze-lhr-data.js [<directory of lhr data>] [<audit name>]
+ */
+
+/* eslint-disable no-console */
 const {readdirSync, readFileSync, writeFileSync} = require('fs');
-const { join } = require('path');
+const {join} = require('path');
 
 const directory = process.argv[2];
 const audit = process.argv[3];
@@ -16,11 +24,10 @@ if (!directory) throw new Error('No directory provided\nUsage: $0 <lhr directory
 
 if (!audit) throw new Error('No audit provided');
 
-const urlDirs = readdirSync(directory, {withFileTypes: true })
+const urlDirs = readdirSync(directory, {withFileTypes: true})
 .filter(dirent => dirent.isDirectory());
 
-let totalPass = 0;
-let totalFail = 0;
+const passSet = new Set();
 const failSet = new Set();
 const runResults = [];
 
@@ -47,36 +54,38 @@ for (const dir of urlDirs) {
     try {
       lhrData = JSON.parse(data);
     } catch (error) {
-      console.log('Error parsing: ' + url);
+      console.error('Error parsing: ' + url);
     }
 
     if (!lhrData) continue;
 
     const auditResult = lhrData.audits[audit].score;
-    if (auditResult && auditResult == 1) {
-      totalPass++;
-    } else {
-      totalFail++;
+    if (!auditResult) {
       failSet.add(url);
     }
 
     const runData = {
       index: run.name,
       auditResult,
-    }
+    };
     entry.runs.push(runData);
   }
 
+  // When the number of runs is greater than 1, we should only count a URL
+  // as passing if the audit is passing for every run
+  if (!failSet.has(url)) {
+    passSet.add(url);
+  }
   runResults.push(entry);
 }
 
 const results = {
   summary: {
-    passes: totalPass,
-    fails: totalFail,
+    passes: passSet.size,
+    fails: failSet.size,
     failingUrls: Array.from(failSet),
   },
   runResults,
-}
+};
 
 writeFileSync('analyze-results.json', JSON.stringify(results, null, 2), 'utf8');

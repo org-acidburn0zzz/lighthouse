@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euxo pipefail
+set -euo pipefail
 
 ##
 # @license Copyright 2020 The Lighthouse Authors. All Rights Reserved.
@@ -10,14 +10,18 @@ set -euxo pipefail
 
 DIRNAME="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 LH_ROOT="$DIRNAME/../../.."
-GCP_DATA="$DIRNAME/gcp-data"
-cd $GCP_DATA
-touch extract_failures.log
-
-for f in lhr-data-*.tar.gz; do
-  echo "Extracting $f...\n"
-  tar -xzvf $f  data || echo "Failed to extract $f\n" >> extract_failures.log
-done
-
 cd $DIRNAME
-node analyze-lhr-data.js "$GCP_DATA/data" $1
+
+GCLOUD_USER=$(gcloud config get-value account | awk -F '@' '{gsub("[^a-z]","",$1); print $1}')
+INSTANCE_NAME="lighthouse-collection-$GCLOUD_USER"
+CLOUDSDK_CORE_PROJECT=${LIGHTHOUSE_COLLECTION_GCLOUD_PROJECT:-lighthouse-lantern-collect}
+ZONE=us-central1-a
+
+echo "Fetching instances..."
+INSTANCES=$(gcloud --project=$CLOUDSDK_CORE_PROJECT compute instances list | grep "$INSTANCE_NAME" | awk '{print $1}')
+for instance in $INSTANCES
+do
+  printf "Killing $instance...\n"
+  gcloud -q --project="$CLOUDSDK_CORE_PROJECT" compute instances delete "$instance" --zone="$ZONE"
+  printf "done!\n"
+done
