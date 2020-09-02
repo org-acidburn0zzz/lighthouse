@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -118,16 +118,28 @@ describe('i18n', () => {
   });
 
   describe('#lookupLocale', () => {
+    const invalidLocale = 'jk-Latn-DE-1996-a-ext-x-phonebk-i-klingon';
+
     it('canonicalizes the locale', () => {
       expect(i18n.lookupLocale('en-xa')).toEqual('en-XA');
     });
 
+    it('canonicalizes the locales', () => {
+      expect(i18n.lookupLocale([invalidLocale, 'en-xa'])).toEqual('en-XA');
+    });
+
+    it('falls back to default if locale not provided or cant be found', () => {
+      expect(i18n.lookupLocale(undefined)).toEqual('en');
+      expect(i18n.lookupLocale(invalidLocale)).toEqual('en');
+      expect(i18n.lookupLocale([invalidLocale, invalidLocale])).toEqual('en');
+    });
+
     it('falls back to root tag prefix if specific locale not available', () => {
-      expect(i18n.lookupLocale('en-JKJK')).toEqual('en');
+      expect(i18n.lookupLocale('es-JKJK')).toEqual('es');
     });
 
     it('falls back to en if no match is available', () => {
-      expect(i18n.lookupLocale('jk-Latn-DE-1996-a-ext-x-phonebk-i-klingon')).toEqual('en');
+      expect(i18n.lookupLocale(invalidLocale)).toEqual('en');
     });
   });
 
@@ -298,7 +310,15 @@ describe('i18n', () => {
       expect(helloInfinityStr).toBeDisplayString('Hello ∞ World');
 
       const helloNaNStr = str_(UIStrings.helloBytesWorld, {in: NaN});
-      expect(helloNaNStr).toBeDisplayString('Hello NaN World');
+      // TODO(COMPAT): workaround can be removed after Node 13 is retired.
+      // expect(helloNaNStr).toBeDisplayString('Hello NaN World');
+
+      // Node 13/V8 7.9 and 8.0 have a bug where `({a: NaN}).a.toLocaleString() === "-NaN"`. It
+      // works correctly in Node 12 and 14, so work around it since NaN isn't essential for
+      // user-facing strings and it will eventually correct itself.
+      const formattedNaNStr = i18n.getFormatted(helloNaNStr, 'en-US');
+      expect(formattedNaNStr === 'Hello NaN World' || formattedNaNStr === 'Hello -NaN World')
+        .toBe(true);
     });
   });
 });

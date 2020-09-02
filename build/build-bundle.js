@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -35,7 +35,7 @@ const locales = fs.readdirSync(__dirname + '/../lighthouse-core/lib/i18n/locales
 
 // HACK: manually include the lighthouse-plugin-publisher-ads audits.
 /** @type {Array<string>} */
-// @ts-ignore
+// @ts-expect-error
 const pubAdsAudits = require('lighthouse-plugin-publisher-ads/plugin.js').audits.map(a => a.path);
 
 /** @param {string} file */
@@ -84,7 +84,7 @@ async function browserifyFile(entryPath, distPath) {
 
   // Don't include locales in DevTools.
   if (isDevtools(entryPath)) {
-    // @ts-ignore bundle.ignore does accept an array of strings.
+    // @ts-expect-error bundle.ignore does accept an array of strings.
     bundle.ignore(locales);
   }
 
@@ -100,8 +100,7 @@ async function browserifyFile(entryPath, distPath) {
   });
 
   // HACK: manually include the lighthouse-plugin-publisher-ads audits.
-  // TODO: there should be a test for this.
-  if (isDevtools(entryPath)) {
+  if (isDevtools(entryPath) || isLightrider(entryPath)) {
     bundle.require('lighthouse-plugin-publisher-ads');
     pubAdsAudits.forEach(pubAdAudit => {
       bundle = bundle.require(pubAdAudit);
@@ -171,7 +170,7 @@ async function cli(argv) {
   build(entryPath, distPath);
 }
 
-// @ts-ignore Test if called from the CLI or as a module.
+// @ts-expect-error Test if called from the CLI or as a module.
 if (require.main === module) {
   cli(process.argv);
 } else {

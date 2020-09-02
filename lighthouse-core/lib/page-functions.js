@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -49,7 +49,7 @@ function registerPerformanceObserverInPage() {
   });
 
   observer.observe({entryTypes: ['longtask']});
-  // HACK: A PerformanceObserver will be GC'd if there are no more references to it, so attach it to
+  // HACK(COMPAT): A PerformanceObserver will be GC'd if there are no more references to it, so attach it to
   // window to ensure we still receive longtask notifications. See https://crbug.com/742530.
   // For an example test of this behavior see https://gist.github.com/patrickhulce/69d8bed1807e762218994b121d06fea6.
   //   FIXME COMPAT: This hack isn't neccessary as of Chrome 62.0.3176.0
@@ -112,7 +112,8 @@ function getElementsInDocument(selector) {
  * @return {string}
  */
 /* istanbul ignore next */
-function getOuterHTMLSnippet(element, ignoreAttrs = []) {
+function getOuterHTMLSnippet(element, ignoreAttrs = [], snippetCharacterLimit = 500) {
+  const ATTRIBUTE_CHAR_LIMIT = 75;
   try {
     // ShadowRoots are sometimes passed in; use their hosts' outerHTML.
     if (element instanceof ShadowRoot) {
@@ -123,9 +124,26 @@ function getOuterHTMLSnippet(element, ignoreAttrs = []) {
     ignoreAttrs.forEach(attribute =>{
       clone.removeAttribute(attribute);
     });
+    let charCount = 0;
+    for (const attributeName of clone.getAttributeNames()) {
+      if (charCount > snippetCharacterLimit) {
+        clone.removeAttribute(attributeName);
+      } else {
+        let attributeValue = clone.getAttribute(attributeName);
+        if (attributeValue.length > ATTRIBUTE_CHAR_LIMIT) {
+          attributeValue = attributeValue.slice(0, ATTRIBUTE_CHAR_LIMIT - 1) + '…';
+          clone.setAttribute(attributeName, attributeValue);
+        }
+        charCount += attributeName.length + attributeValue.length;
+      }
+    }
+
     const reOpeningTag = /^[\s\S]*?>/;
-    const match = clone.outerHTML.match(reOpeningTag);
-    return (match && match[0]) || '';
+    const [match] = clone.outerHTML.match(reOpeningTag) || [];
+    if (match && charCount > snippetCharacterLimit) {
+      return match.slice(0, match.length - 1) + ' …>';
+    }
+    return match || '';
   } catch (_) {
     // As a last resort, fall back to localName.
     return `<${element.localName}>`;
@@ -135,30 +153,74 @@ function getOuterHTMLSnippet(element, ignoreAttrs = []) {
 
 /**
  * Computes a memory/CPU performance benchmark index to determine rough device class.
+ * @see https://github.com/GoogleChrome/lighthouse/issues/9085
  * @see https://docs.google.com/spreadsheets/d/1E0gZwKsxegudkjJl8Fki_sOwHKpqgXwt8aBAfuUaB8A/edit?usp=sharing
  *
- * The benchmark creates a string of length 100,000 in a loop.
- * The returned index is the number of times per second the string can be created.
+ * Historically (until LH 6.3), this benchmark created a string of length 100,000 in a loop, and returned
+ * the number of times per second the string can be created.
  *
- *  - 750+ is a desktop-class device, Core i3 PC, iPhone X, etc
- *  - 300+ is a high-end Android phone, Galaxy S8, low-end Chromebook, etc
- *  - 75+ is a mid-tier Android phone, Nexus 5X, etc
- *  - <75 is a budget Android phone, Alcatel Ideal, Galaxy J2, etc
+ * Changes to v8 in 8.6.106 changed this number and also made Chrome more variable w.r.t GC interupts.
+ * This benchmark now is a hybrid of a similar GC-heavy approach to the original benchmark and an array
+ * copy benchmark.
+ *
+ * As of Chrome m86...
+ *
+ *  - 1000+ is a desktop-class device, Core i3 PC, iPhone X, etc
+ *  - 800+ is a high-end Android phone, Galaxy S8, low-end Chromebook, etc
+ *  - 125+ is a mid-tier Android phone, Moto G4, etc
+ *  - <125 is a budget Android phone, Alcatel Ideal, Galaxy J2, etc
  */
 /* istanbul ignore next */
-function ultradumbBenchmark() {
-  const start = Date.now();
-  let iterations = 0;
+function computeBenchmarkIndex() {
+  /**
+   * The GC-heavy benchmark that creates a string of length 10000 in a loop.
+   * The returned index is the number of times per second the string can be created divided by 10.
+   * The division by 10 is to keep similar magnitudes to an earlier version of BenchmarkIndex that
+   * used a string length of 100000 instead of 10000.
+   */
+  function benchmarkIndexGC() {
+    const start = Date.now();
+    let iterations = 0;
 
-  while (Date.now() - start < 500) {
-    let s = ''; // eslint-disable-line no-unused-vars
-    for (let j = 0; j < 100000; j++) s += 'a';
+    while (Date.now() - start < 500) {
+      let s = ''; // eslint-disable-line no-unused-vars
+      for (let j = 0; j < 10000; j++) s += 'a';
 
-    iterations++;
+      iterations++;
+    }
+
+    const durationInSeconds = (Date.now() - start) / 1000;
+    return Math.round(iterations / 10 / durationInSeconds);
   }
 
-  const durationInSeconds = (Date.now() - start) / 1000;
-  return Math.round(iterations / durationInSeconds);
+  /**
+   * The non-GC-dependent benchmark that copies integers back and forth between two arrays of length 100000.
+   * The returned index is the number of times per second a copy can be made, divided by 10.
+   * The division by 10 is to keep similar magnitudes to the GC-dependent version.
+   */
+  function benchmarkIndexNoGC() {
+    const arrA = [];
+    const arrB = [];
+    for (let i = 0; i < 100000; i++) arrA[i] = arrB[i] = i;
+
+    const start = Date.now();
+    let iterations = 0;
+
+    while (Date.now() - start < 500) {
+      const src = iterations % 2 === 0 ? arrA : arrB;
+      const tgt = iterations % 2 === 0 ? arrB : arrA;
+
+      for (let j = 0; j < src.length; j++) tgt[j] = src[j];
+
+      iterations++;
+    }
+
+    const durationInSeconds = (Date.now() - start) / 1000;
+    return Math.round(iterations / 10 / durationInSeconds);
+  }
+
+  // The final BenchmarkIndex is a simple average of the two components.
+  return (benchmarkIndexGC() + benchmarkIndexNoGC()) / 2;
 }
 
 /**
@@ -303,6 +365,57 @@ function getNodeLabel(node) {
   return tagName;
 }
 
+/**
+ * @param {HTMLElement} element
+ * @param {LH.Artifacts.Rect}
+ */
+/* istanbul ignore next */
+function getBoundingClientRect(element) {
+  // The protocol does not serialize getters, so extract the values explicitly.
+  const rect = element.getBoundingClientRect();
+  return {
+    top: Math.round(rect.top),
+    bottom: Math.round(rect.bottom),
+    left: Math.round(rect.left),
+    right: Math.round(rect.right),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+  };
+}
+
+/*
+ * RequestIdleCallback shim that calculates the remaining deadline time in order to avoid a potential lighthouse
+ * penalty for tests run with simulated throttling. Reduces the deadline time to (50 - safetyAllowance) / cpuSlowdownMultiplier to
+ * ensure a long task is very unlikely if using the API correctly.
+ * @param {number} cpuSlowdownMultiplier
+ * @return {null}
+ */
+/* istanbul ignore next */
+function wrapRequestIdleCallback(cpuSlowdownMultiplier) {
+  const safetyAllowanceMs = 10;
+  const maxExecutionTimeMs = Math.floor((50 - safetyAllowanceMs) / cpuSlowdownMultiplier);
+  const nativeRequestIdleCallback = window.requestIdleCallback;
+  window.requestIdleCallback = (cb) => {
+    const cbWrap = (deadline, timeout) => {
+      const start = Date.now();
+      deadline.__timeRemaining = deadline.timeRemaining;
+      deadline.timeRemaining = () => {
+        return Math.min(
+          deadline.__timeRemaining(), Math.max(0, maxExecutionTimeMs - (Date.now() - start))
+        );
+      };
+      deadline.timeRemaining.toString = () => {
+        return 'function timeRemaining() { [native code] }';
+      };
+      cb(deadline, timeout);
+    };
+    return nativeRequestIdleCallback(cbWrap);
+  };
+  window.requestIdleCallback.toString = () => {
+    return 'function requestIdleCallback() { [native code] }';
+  };
+}
+
 module.exports = {
   wrapRuntimeEvalErrorInBrowserString: wrapRuntimeEvalErrorInBrowser.toString(),
   registerPerformanceObserverInPageString: registerPerformanceObserverInPage.toString(),
@@ -310,12 +423,14 @@ module.exports = {
   getElementsInDocumentString: getElementsInDocument.toString(),
   getOuterHTMLSnippetString: getOuterHTMLSnippet.toString(),
   getOuterHTMLSnippet: getOuterHTMLSnippet,
-  ultradumbBenchmark: ultradumbBenchmark,
-  ultradumbBenchmarkString: ultradumbBenchmark.toString(),
+  computeBenchmarkIndex: computeBenchmarkIndex,
+  computeBenchmarkIndexString: computeBenchmarkIndex.toString(),
   getNodePathString: getNodePath.toString(),
   getNodeSelectorString: getNodeSelector.toString(),
   getNodeSelector: getNodeSelector,
   getNodeLabel: getNodeLabel,
   getNodeLabelString: getNodeLabel.toString(),
   isPositionFixedString: isPositionFixed.toString(),
+  wrapRequestIdleCallbackString: wrapRequestIdleCallback.toString(),
+  getBoundingClientRectString: getBoundingClientRect.toString(),
 };

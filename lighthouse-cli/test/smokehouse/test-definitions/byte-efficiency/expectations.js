@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -19,6 +19,10 @@ const expectations = [
           async: false,
           defer: false,
           source: 'head',
+          // Only do a single assertion for `devtoolsNodePath`: this can be flaky for elements
+          // deep in the DOM, and the sample LHR test has plenty of places that would catch
+          // a regression in `devtoolsNodePath` calculation. Keep just one for the benefit
+          // of other smoke test runners.
           devtoolsNodePath: '2,HTML,0,HEAD,3,SCRIPT',
         },
         {
@@ -27,7 +31,6 @@ const expectations = [
           async: false,
           defer: false,
           source: 'head',
-          devtoolsNodePath: '2,HTML,0,HEAD,5,SCRIPT',
         },
         {
           type: null,
@@ -35,7 +38,6 @@ const expectations = [
           async: false,
           defer: false,
           source: 'head',
-          devtoolsNodePath: '2,HTML,0,HEAD,6,SCRIPT',
         },
         {
           type: null,
@@ -43,7 +45,7 @@ const expectations = [
           async: false,
           defer: false,
           source: 'body',
-          devtoolsNodePath: '2,HTML,1,BODY,0,DIV,3,SCRIPT',
+          content: /shadowRoot/,
         },
         {
           type: null,
@@ -51,7 +53,7 @@ const expectations = [
           async: false,
           defer: false,
           source: 'body',
-          devtoolsNodePath: '2,HTML,1,BODY,3,SCRIPT',
+          content: /generateInlineStyleWithSize/,
         },
         {
           type: null,
@@ -59,7 +61,6 @@ const expectations = [
           async: true,
           defer: false,
           source: 'body',
-          devtoolsNodePath: '2,HTML,1,BODY,1438,SCRIPT',
         },
         {
           type: null,
@@ -67,7 +68,6 @@ const expectations = [
           async: false,
           defer: false,
           source: 'body',
-          devtoolsNodePath: '2,HTML,1,BODY,1439,SCRIPT',
           content: /Used block #1/,
         },
         {
@@ -76,7 +76,6 @@ const expectations = [
           async: false,
           defer: false,
           source: 'body',
-          devtoolsNodePath: '2,HTML,1,BODY,1440,SCRIPT',
           content: /Unused block #1/,
         },
       ],
@@ -85,6 +84,15 @@ const expectations = [
       requestedUrl: 'http://localhost:10200/byte-efficiency/tester.html',
       finalUrl: 'http://localhost:10200/byte-efficiency/tester.html',
       audits: {
+        'uses-http2': {
+          score: '<1',
+          details: {
+            overallSavingsMs: '>0',
+            items: {
+              length: '>10',
+            },
+          },
+        },
         'unminified-css': {
           details: {
             overallSavingsBytes: '>17000',
@@ -96,8 +104,10 @@ const expectations = [
         'unminified-javascript': {
           score: '<1',
           details: {
-            overallSavingsBytes: '>45000',
+            // the specific ms value is not meaningful for this smoketest
+            // *some largish amount* of savings should be reported
             overallSavingsMs: '>500',
+            overallSavingsBytes: '>45000',
             items: [
               {
                 url: 'http://localhost:10200/byte-efficiency/script.js',
@@ -134,8 +144,10 @@ const expectations = [
         'unused-javascript': {
           score: '<1',
           details: {
+            // the specific ms value here is not meaningful for this smoketest
+            // *some* savings should be reported
+            overallSavingsMs: '>0',
             overallSavingsBytes: '>=25000',
-            overallSavingsMs: '>300',
             items: [
               {
                 url: 'http://localhost:10200/byte-efficiency/script.js',
@@ -149,23 +161,15 @@ const expectations = [
               },
               {
                 url: 'http://localhost:10200/byte-efficiency/bundle.js',
-                totalBytes: 12913,
-                wastedBytes: 5827,
-                sources: [
-                  '…./b.js',
-                  '…./c.js',
-                  '…webpack/bootstrap',
-                ],
-                sourceBytes: [
-                  4417,
-                  2200,
-                  2809,
-                ],
-                sourceWastedBytes: [
-                  2191,
-                  2182,
-                  1259,
-                ],
+                totalBytes: '12913 +/- 1000',
+                wastedBytes: '5827 +/- 200',
+                subItems: {
+                  items: [
+                    {source: '…./b.js', sourceBytes: '4417 +/- 50', sourceWastedBytes: '2191 +/- 50'},
+                    {source: '…./c.js', sourceBytes: '2200 +/- 50', sourceWastedBytes: '2182 +/- 50'},
+                    {source: '…webpack/bootstrap', sourceBytes: '2809 +/- 50', sourceWastedBytes: '1259 +/- 50'},
+                  ],
+                },
               },
             ],
           },
@@ -189,13 +193,15 @@ const expectations = [
           details: {
             overallSavingsBytes: '>60000',
             items: {
-              length: 5,
+              length: 6,
             },
           },
         },
         'uses-text-compression': {
           score: '<1',
           details: {
+            // the specific ms value is not meaningful for this smoketest
+            // *some largish amount* of savings should be reported
             overallSavingsMs: '>700',
             overallSavingsBytes: '>50000',
             items: {
@@ -211,15 +217,38 @@ const expectations = [
             },
           },
         },
+        // Check that images aren't TOO BIG.
         'uses-responsive-images': {
-          displayValue: 'Potential savings of 53\xa0KB',
           details: {
-            overallSavingsBytes: '>50000',
-            items: {
-              0: {wastedPercent: '<46'},
-              1: {wastedPercent: '<46'},
-              length: 2,
-            },
+            overallSavingsBytes: '113000 +/- 5000',
+            items: [
+              {wastedPercent: '56 +/- 5', url: /lighthouse-1024x680.jpg/},
+              {wastedPercent: '78 +/- 5', url: /lighthouse-2048x1356.webp\?size0/},
+              {wastedPercent: '56 +/- 5', url: /lighthouse-480x320.webp/},
+              {wastedPercent: '20 +/- 5', url: /lighthouse-480x320.jpg/},
+              {wastedPercent: '20 +/- 5', url: /lighthouse-480x320\.jpg\?attributesized/},
+            ],
+          },
+        },
+        // Checks that images aren't TOO SMALL.
+        'image-size-responsive': {
+          details: {
+            items: [
+              // One of these is the ?duplicate variant and another is the
+              // ?cssauto variant but sort order isn't guaranteed
+              // since the pixel diff is equivalent for identical images.
+              {url: /lighthouse-320x212-poor.jpg/},
+              {url: /lighthouse-320x212-poor.jpg/},
+              {url: /lighthouse-320x212-poor.jpg/},
+            ],
+          },
+        },
+        'unsized-images': {
+          details: {
+            items: [
+              {url: /lighthouse-320x212-poor\.jpg/},
+              {url: /lighthouse-320x212-poor\.jpg\?cssauto/},
+            ],
           },
         },
       },
@@ -235,19 +264,23 @@ const expectations = [
             items: [
               {
                 url: 'http://localhost:10200/byte-efficiency/gzip.html',
+                finished: true,
               },
               {
                 url: 'http://localhost:10200/byte-efficiency/script.js?gzip=1',
                 transferSize: '1100 +/- 100',
                 resourceSize: '53000 +/- 1000',
+                finished: true,
               },
               {
                 url: 'http://localhost:10200/byte-efficiency/script.js',
                 transferSize: '53200 +/- 1000',
                 resourceSize: '53000 +/- 1000',
+                finished: true,
               },
               {
                 url: 'http://localhost:10200/favicon.ico',
+                finished: true,
               },
             ],
           },

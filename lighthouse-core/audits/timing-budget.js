@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2019 Google Inc. All Rights Reserved.
+ * @license Copyright 2019 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -24,7 +24,7 @@ const UIStrings = {
 
 const str_ = i18n.createMessageInstanceIdFn(__filename, UIStrings);
 
-/** @typedef {{metric: LH.Budget.TimingMetric, label: string, measurement?: number, overBudget?: number}} BudgetItem */
+/** @typedef {{metric: LH.Budget.TimingMetric, label: string, measurement?: LH.Audit.Details.NumericValue|number, overBudget?: LH.Audit.Details.NumericValue|number}} BudgetItem */
 
 class TimingBudget extends Audit {
   /**
@@ -55,6 +55,8 @@ class TimingBudget extends Audit {
       'estimated-input-latency': i18n.UIStrings.estimatedInputLatencyMetric,
       'total-blocking-time': i18n.UIStrings.totalBlockingTimeMetric,
       'speed-index': i18n.UIStrings.speedIndexMetric,
+      'largest-contentful-paint': i18n.UIStrings.largestContentfulPaintMetric,
+      'cumulative-layout-shift': i18n.UIStrings.cumulativeLayoutShiftMetric,
     };
     return str_(strMappings[timingMetric]);
   }
@@ -75,20 +77,25 @@ class TimingBudget extends Audit {
       'estimated-input-latency': summary.estimatedInputLatency,
       'total-blocking-time': summary.totalBlockingTime,
       'speed-index': summary.speedIndex,
+      'largest-contentful-paint': summary.largestContentfulPaint,
+      'cumulative-layout-shift': summary.cumulativeLayoutShift,
     };
     return measurements[timingMetric];
   }
 
   /**
-   * @param {LH.Budget} budget
+   * @param {Immutable<LH.Budget>} budget
    * @param {LH.Artifacts.TimingSummary} summary
    * @return {Array<BudgetItem>}
    */
   static tableItems(budget, summary) {
+    /** @type {Array<BudgetItem>} */
+    let items = [];
     if (!budget.timings) {
-      return [];
+      return items;
     }
-    return budget.timings.map((timingBudget) => {
+
+    items = budget.timings.map((timingBudget) => {
       const metricName = timingBudget.metric;
       const label = this.getRowLabel(metricName);
       const measurement = this.getMeasurement(metricName, summary);
@@ -103,6 +110,28 @@ class TimingBudget extends Audit {
     }).sort((a, b) => {
       return (b.overBudget || 0) - (a.overBudget || 0);
     });
+
+    // CLS requires a different granularity and should be a numeric type.
+    // Defining type here overrides the column setting so that it doesn't receive ms units.
+    const clsItem = items.find(item => item.metric === 'cumulative-layout-shift');
+    if (clsItem) {
+      if (typeof clsItem.measurement !== 'object') {
+        clsItem.measurement = {
+          type: 'numeric',
+          value: Number(clsItem.measurement),
+          granularity: 0.01,
+        };
+      }
+      if (typeof clsItem.overBudget !== 'object') {
+        clsItem.overBudget = {
+          type: 'numeric',
+          value: Number(clsItem.overBudget),
+          granularity: 0.01,
+        };
+      }
+    }
+
+    return items;
   }
 
   /**

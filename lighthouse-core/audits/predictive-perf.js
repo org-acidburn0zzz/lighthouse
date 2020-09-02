@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -17,8 +17,8 @@ const LanternEil = require('../computed/metrics/lantern-estimated-input-latency.
 const LanternLcp = require('../computed/metrics/lantern-largest-contentful-paint.js');
 
 // Parameters (in ms) for log-normal CDF scoring. To see the curve:
-//   https://www.desmos.com/calculator/rjp0lbit8y
-const SCORING_POINT_OF_DIMINISHING_RETURNS = 1700;
+//   https://www.desmos.com/calculator/bksgkihhj8
+const SCORING_P10 = 3651;
 const SCORING_MEDIAN = 10000;
 
 class PredictivePerf extends Audit {
@@ -46,7 +46,7 @@ class PredictivePerf extends Audit {
     const trace = artifacts.traces[Audit.DEFAULT_PASS];
     const devtoolsLog = artifacts.devtoolsLogs[Audit.DEFAULT_PASS];
     /** @type {LH.Config.Settings} */
-    // @ts-ignore - TODO(bckenny): allow optional `throttling` settings
+    // @ts-expect-error - TODO(bckenny): allow optional `throttling` settings
     const settings = {}; // Use default settings.
     const fcp = await LanternFcp.request({trace, devtoolsLog, settings}, context);
     const fmp = await LanternFmp.request({trace, devtoolsLog, settings}, context);
@@ -87,9 +87,8 @@ class PredictivePerf extends Audit {
     };
 
     const score = Audit.computeLogNormalScore(
-      values.roughEstimateOfTTI,
-      SCORING_POINT_OF_DIMINISHING_RETURNS,
-      SCORING_MEDIAN
+      {p10: SCORING_P10, median: SCORING_MEDIAN},
+      values.roughEstimateOfTTI
     );
 
     const i18n = new I18n(context.settings.locale);

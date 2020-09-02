@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2016 Google Inc. All Rights Reserved.
+ * @license Copyright 2016 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -90,13 +90,13 @@ const expectations = [
           score: 1,
         },
         'service-worker': {
-          score: 1,
+          score: 0,
         },
         'works-offline': {
-          score: 1,
+          score: 0,
         },
         'offline-start-url': {
-          score: 1,
+          score: 0,
         },
         'viewport': {
           score: 1,
@@ -108,16 +108,13 @@ const expectations = [
         // Ignore speed test; just verify that it ran.
         },
         'installable-manifest': {
-          score: 1,
-          details: {items: [pwaDetailsExpectations]},
+          score: 0,
         },
         'splash-screen': {
-          score: 1,
-          details: {items: [pwaDetailsExpectations]},
+          score: 0,
         },
         'themed-omnibox': {
-          score: 1,
-          details: {items: [pwaDetailsExpectations]},
+          score: 0,
         },
         'content-width': {
           score: 1,

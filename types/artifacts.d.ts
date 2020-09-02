@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -82,6 +82,8 @@ declare global {
       ScriptElements: Array<Artifacts.ScriptElement>;
       /** The dimensions and devicePixelRatio of the loaded viewport. */
       ViewportDimensions: Artifacts.ViewportDimensions;
+      /** All the form elements in the page and formless inputs. */
+      FormElements: Artifacts.Form[];
     }
 
     /**
@@ -110,12 +112,18 @@ declare global {
       Fonts: Artifacts.Font[];
       /** Information on poorly sized font usage and the text affected by it. */
       FontSize: Artifacts.FontSize;
+      /** Screenshot of the entire page (rather than just the above the fold content). */
+      FullPageScreenshot: Artifacts.FullPageScreenshot | null;
+      /** Information about event listeners registered on the global object. */
+      GlobalListeners: Array<Artifacts.GlobalListener>;
       /** The page's document body innerText if loaded with JavaScript disabled. */
       HTMLWithoutJavaScript: {bodyText: string, hasNoScript: boolean};
       /** Whether the page ended up on an HTTPS page after attempting to load the HTTP version. */
       HTTPRedirect: {value: boolean};
-      /** JS coverage information for code used during page load. */
-      JsUsage: Crdp.Profiler.ScriptCoverage[];
+      /** The issues surfaced in the devtools Issues panel */
+      InspectorIssues: Artifacts.InspectorIssues;
+      /** JS coverage information for code used during page load. Keyed by URL. */
+      JsUsage: Record<string, Crdp.Profiler.ScriptCoverage[]>;
       /** Parsed version of the page's Web App Manifest, or null if none found. */
       Manifest: Artifacts.Manifest | null;
       /** The URL loaded with interception */
@@ -140,6 +148,8 @@ declare global {
       TagsBlockingFirstPaint: Artifacts.TagBlockingFirstPaint[];
       /** Information about tap targets including their position and size. */
       TapTargets: Artifacts.TapTarget[];
+      /** Elements associated with metrics (ie: Largest Contentful Paint element). */
+      TraceElements: Artifacts.TraceElement[];
     }
 
     module Artifacts {
@@ -159,11 +169,14 @@ declare global {
         nodes: Array<{
           path: string;
           html: string;
+          boundingRect?: Rect;
           snippet: string;
           target: Array<string>;
           failureSummary?: string;
           nodeLabel?: string;
         }>;
+        // When rules error they set these properties
+        // https://github.com/dequelabs/axe-core/blob/eeff122c2de11dd690fbad0e50ba2fdb244b50e8/lib/core/base/audit.js#L684-L693
         error?: RuleExecutionError;
       }
 
@@ -171,6 +184,7 @@ declare global {
         violations: Array<AxeResult>;
         notApplicable: Array<Pick<AxeResult, 'id'>>;
         incomplete: Array<AxeResult>;
+        version: string;
       }
 
       export interface CSSStyleSheetInfo {
@@ -224,7 +238,7 @@ declare global {
         rel: 'alternate'|'canonical'|'dns-prefetch'|'preconnect'|'preload'|'stylesheet'|string;
         /** The `href` attribute of the link or `null` if it was invalid in the header. */
         href: string | null
-        /** The raw value of the `href` attribute. Only different from `href` when source is 'header' */
+        /** The raw value of the `href` attribute. Only different from `href` when source is 'headers' */
         hrefRaw: string
         /** The `hreflang` attribute of the link */
         hreflang: string
@@ -234,6 +248,12 @@ declare global {
         crossOrigin: string | null
         /** Where the link was found, either in the DOM or in the headers of the main document */
         source: 'head'|'body'|'headers'
+        /** Path that uniquely identifies the node in the DOM. This is not defined when `source` is 'headers' */
+        devtoolsNodePath?: string
+        /** Selector for the DOM node. This is not defined when `source` is 'headers' */
+        selector?: string
+        /** Human readable label for the element. This is not defined when `source` is 'headers' */
+        nodeLabel?: string
       }
 
       export interface ScriptElement {
@@ -270,7 +290,7 @@ declare global {
         /** An optional name of the generated code (the bundled code that was the result of this build process) that this source map is associated with. */
         file?: string
         /**
-         * An optional array of maps that are associated with an offset into the generated code. 
+         * An optional array of maps that are associated with an offset into the generated code.
          * `map` is optional because the spec defines that either `url` or `map` must be defined.
          * We explicitly only support `map` here.
         */
@@ -304,6 +324,7 @@ declare global {
         script: ScriptElement;
         map: TextSourceMap;
         sizes: {
+          // TODO(cjamcl): Rename to `sources`.
           files: Record<string, number>;
           unmappedBytes: number;
           totalBytes: number;
@@ -313,13 +334,22 @@ declare global {
       /** @see https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a#Attributes */
       export interface AnchorElement {
         rel: string
+        /** The computed href property: https://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-88517319, use `rawHref` for the exact attribute value */
         href: string
+        /** The exact value of the href attribute value, as it is in the DOM */
+        rawHref: string
+        name?: string
         text: string
+        role: string
         target: string
         devtoolsNodePath: string
         selector: string
         nodeLabel: string
         outerHTML: string
+        onclick: string
+        listeners?: Array<{
+          type: Crdp.DOMDebugger.EventListener['type']
+        }>
       }
 
       export interface Font {
@@ -340,9 +370,20 @@ declare global {
         analyzedFailingTextLength: number;
         /** Elements that contain a text node that failed size criteria. */
         analyzedFailingNodesData: Array<{
+          /* nodeId of the failing TextNode. */
+          nodeId: number;
           fontSize: number;
           textLength: number;
-          node: FontSize.DomNodeWithParent;
+          parentNode: {
+            backendNodeId: number;
+            attributes: string[];
+            nodeName: string;
+            parentNode?: {
+              backendNodeId: number;
+              attributes: string[];
+              nodeName: string;
+            };
+          };
           cssRule?: {
             type: 'Regular' | 'Inline' | 'Attributes';
             range?: {startLine: number, startColumn: number};
@@ -351,17 +392,6 @@ declare global {
             stylesheet?: Crdp.CSS.CSSStyleSheetHeader;
           }
         }>
-      }
-
-      export module FontSize {
-        export interface DomNodeWithParent extends Crdp.DOM.Node {
-          parentId: number;
-          parentNode: DomNodeWithParent;
-        }
-
-        export interface DomNodeMaybeWithParent extends Crdp.DOM.Node {
-          parentNode?: DomNodeMaybeWithParent;
-        }
       }
 
       // TODO(bckenny): real type for parsed manifest.
@@ -373,6 +403,8 @@ declare global {
 
       export interface ImageElement {
         src: string;
+        /** The srcset attribute value. @see https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/srcset */
+        srcset: string;
         /** The displayed width of the image, uses img.width when available falling back to clientWidth. See https://codepen.io/patrickhulce/pen/PXvQbM for examples. */
         displayedWidth: number;
         /** The displayed height of the image, uses img.height when available falling back to clientHeight. See https://codepen.io/patrickhulce/pen/PXvQbM for examples. */
@@ -381,6 +413,14 @@ declare global {
         naturalWidth: number;
         /** The natural height of the underlying image, uses img.naturalHeight. See https://codepen.io/patrickhulce/pen/PXvQbM for examples. */
         naturalHeight: number;
+        /** The raw width attribute of the image element. CSS images will be set to the empty string. */
+        attributeWidth: string;
+        /** The raw height attribute of the image element. CSS images will be set to the empty string. */
+        attributeHeight: string;
+        /** The CSS width property of the image element. */
+        cssWidth?: string;
+        /** The CSS height property of the image element. */
+        cssHeight?: string;
         /** The BoundingClientRect of the element. */
         clientRect: {
           top: number;
@@ -388,14 +428,32 @@ declare global {
           left: number;
           right: number;
         };
+        /** The CSS position attribute of the element */
+        cssComputedPosition: string;
         /** Flags whether this element was an image via CSS background-image rather than <img> tag. */
         isCss: boolean;
         /** Flags whether this element was contained within a <picture> tag. */
         isPicture: boolean;
+        /** Flags whether this element was contained within a ShadowRoot */
+        isInShadowDOM: boolean;
         /** Flags whether this element was sized using a non-default `object-fit` CSS property. */
         usesObjectFit: boolean;
+        /** Flags whether this element was rendered using a pixel art scaling method.
+         *  See https://developer.mozilla.org/en-US/docs/Games/Techniques/Crisp_pixel_art_look for
+         *  details.
+         */
+        usesPixelArtScaling: boolean;
+        /** Flags whether the image has a srcset with density descriptors.
+         *  See https://html.spec.whatwg.org/multipage/images.html#pixel-density-descriptor
+         */
+        usesSrcSetDensityDescriptor: boolean;
         /** The size of the underlying image file in bytes. 0 if the file could not be identified. */
         resourceSize: number;
+        /** Path that uniquely identifies the node in the DOM */
+        devtoolsNodePath: string;
+        snippet: string;
+        selector: string;
+        nodeLabel: string;
         /** The MIME type of the underlying image file. */
         mimeType?: string;
         /** The loading attribute of the image. */
@@ -450,6 +508,19 @@ declare global {
         path: string;
         href: string;
         clientRects: Rect[];
+        boundingRect: Rect;
+      }
+
+      export interface TraceElement {
+        traceEventType: 'largest-contentful-paint'|'layout-shift'|'animation';
+        selector: string;
+        nodeLabel?: string;
+        devtoolsNodePath: string;
+        snippet?: string;
+        score?: number;
+        boundingRect: Rect;
+        nodeId?: number;
+        animations?: {name?: string, failureReasonsMask?: number, unsupportedProperties?: string[]}[];
       }
 
       export interface ViewportDimensions {
@@ -458,6 +529,10 @@ declare global {
         outerWidth: number;
         outerHeight: number;
         devicePixelRatio: number;
+      }
+
+      export interface InspectorIssues {
+        mixedContent: Crdp.Audits.MixedContentIssueDetails[];
       }
 
       // Computed artifact types below.
@@ -500,7 +575,7 @@ declare global {
       export interface MetricComputationDataInput {
         devtoolsLog: DevtoolsLog;
         trace: Trace;
-        settings: Config.Settings;
+        settings: Immutable<Config.Settings>;
         simulator?: LanternSimulator;
       }
 
@@ -533,7 +608,7 @@ declare global {
       export type Speedline = speedline.Output<'speedIndex'>;
 
       export interface TraceTimes {
-        navigationStart: number;
+        timeOrigin: number;
         firstPaint?: number;
         firstContentfulPaint: number;
         firstMeaningfulPaint?: number;
@@ -541,7 +616,6 @@ declare global {
         traceEnd: number;
         load?: number;
         domContentLoaded?: number;
-        cumulativeLayoutShift?: number;
       }
 
       export interface TraceOfTab {
@@ -557,8 +631,8 @@ declare global {
         mainFrameIds: {pid: number, tid: number, frameId: string};
         /** The list of frames committed in the trace. */
         frames: Array<{frame: string, url: string}>;
-        /** The trace event marking navigationStart. */
-        navigationStartEvt: TraceEvent;
+        /** The trace event marking the time at which the page load should consider to have begun. Typically the same as the navigationStart but might differ due to SPA navigations, client-side redirects, etc. */
+        timeOriginEvt: TraceEvent;
         /** The trace event marking firstPaint, if it was found. */
         firstPaintEvt?: TraceEvent;
         /** The trace event marking firstContentfulPaint, if it was found. */
@@ -594,6 +668,13 @@ declare global {
         npm?: string;
       }
 
+      export interface FullPageScreenshot {
+        /** Base64 image data URL. */
+        data: string;
+        width: number;
+        height: number;
+      }
+
       export interface TimingSummary {
         firstContentfulPaint: number;
         firstContentfulPaintTs: number | undefined;
@@ -612,10 +693,11 @@ declare global {
         maxPotentialFID: number | undefined;
         cumulativeLayoutShift: number | undefined;
         totalBlockingTime: number;
+        observedTimeOrigin: number;
+        observedTimeOriginTs: number;
         observedNavigationStart: number;
         observedNavigationStartTs: number;
         observedCumulativeLayoutShift: number | undefined;
-        observedCumulativeLayoutShiftTs: number | undefined;
         observedFirstPaint: number | undefined;
         observedFirstPaintTs: number | undefined;
         observedFirstContentfulPaint: number;
@@ -636,6 +718,42 @@ declare global {
         observedLastVisualChangeTs: number;
         observedSpeedIndex: number;
         observedSpeedIndexTs: number;
+      }
+
+      export interface Form {
+        /** If attributes is missing that means this is a formless set of elements. */
+        attributes?: { id: string, name: string, autocomplete: string, nodeLabel: string, snippet: string,};
+        inputs: Array<FormInput>;
+        labels: Array<FormLabel>;
+      }
+
+      /** Attributes collected for every input element in the inputs array from the forms interface. */
+      export interface FormInput {
+        id: string;
+        name: string;
+        placeholder?: string;
+        autocomplete: string;
+        nodeLabel: string;
+        snippet: string;
+      }
+
+      /** Attributes collected for every label element in the labels array from the forms interface */
+      export interface FormLabel {
+        for: string;
+        nodeLabel: string;
+        snippet: string;
+      }
+
+      /** Information about an event listener registered on the global object. */
+      export interface GlobalListener {
+        /** Event listener type, limited to those events currently of interest. */
+        type: 'pagehide'|'unload'|'visibilitychange';
+        /** The DevTools protocol script identifier. */
+        scriptId: string;
+        /** Line number in the script (0-based). */
+        lineNumber: number;
+        /** Column number in the script (0-based). */
+        columnNumber: number;
       }
     }
   }

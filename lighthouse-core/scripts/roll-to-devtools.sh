@@ -1,28 +1,31 @@
 #!/usr/bin/env bash
 
 ##
-# @license Copyright 2017 Google Inc. All Rights Reserved.
+# @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 # Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
 ##
 
+# You will need a DevTools Frontend checkout
+# See https://chromium.googlesource.com/devtools/devtools-frontend/+/HEAD/docs/workflows.md
+
 # usage:
 
+# default to checkout at ~/src/devtools/devtools-frontend
 #   yarn devtools
 
-# with a custom devtools front_end location:
-#   yarn devtools node_modules/temp-devtoolsfrontend/
+# with a custom devtools location (could be path to standalone checkout):
+#   yarn devtools ~/code/devtools/devtools-frontend
 
-chromium_dir="$HOME/chromium/src"
 check="\033[96m ✓\033[39m"
 
 if [[ -n "$1" ]]; then
   dt_dir="$1"
 else
-  dt_dir="$chromium_dir/third_party/devtools-frontend/src"
+  dt_dir="$HOME/src/devtools/devtools-frontend"
 fi
 
-if [[ ! -d "$dt_dir" || ! -a "$dt_dir/front_end/Runtime.js" ]]; then
+if [[ ! -d "$dt_dir" || ! -a "$dt_dir/front_end/shell.js" ]]; then
   echo -e "\033[31m✖ Error!\033[39m"
   echo "This script requires a devtools frontend folder. We didn't find one here:"
   echo "    $dt_dir"
@@ -48,11 +51,14 @@ echo -e "$check Report resources copied."
 # copy locale JSON files (but not the .ctc.json ones)
 lh_locales_dir="lighthouse-core/lib/i18n/locales/"
 fe_locales_dir="$fe_lh_dir/locales"
-
 rsync -avh "$lh_locales_dir" "$fe_locales_dir" --exclude="*.ctc.json" --delete
 echo -e "$check Locale JSON files copied."
 
+# copy webtests
+lh_webtests_dir="third-party/chromium-webtests/webtests/http/tests/devtools/lighthouse/"
+fe_webtests_dir="$dt_dir/test/webtests/http/tests/devtools/lighthouse"
+rsync -avh "$lh_webtests_dir" "$fe_webtests_dir" --exclude="OWNERS" --delete
+
 echo ""
-echo "Done. To rebase the test expectations, run: "
-echo "    yarn --cwd ~/chromium/src/third_party/devtools-frontend/src test 'http/tests/devtools/lighthouse/*.js' --layout-tests-dir test/webtests --reset-results"
-echo " (you also need to do `autoninja -C out/Linux chrome blink_tests` in the chromium checkout)"
+echo "Done. To run the webtests: " 
+echo "    DEVTOOLS_PATH=\"$dt_dir\" yarn test-devtools"

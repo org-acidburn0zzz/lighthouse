@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2019 Google Inc. All Rights Reserved.
+ * @license Copyright 2019 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -72,19 +72,14 @@ async function internalRun(url, tmpPath, configJson, isDebug) {
     args.push(`--config-path=${configPath}`);
   }
 
-  if (process.env.APPVEYOR) {
-    // Appveyor is hella slow already, disable CPU throttling so we're not 16x slowdown
-    // see https://github.com/GoogleChrome/lighthouse/issues/4891
-    args.push('--throttling.cpuSlowdownMultiplier=1');
-  }
-
   const command = 'node';
+  const env = {...process.env, NODE_ENV: 'test'};
   localConsole.log(`${log.dim}$ ${command} ${args.join(' ')} ${log.reset}`);
 
   /** @type {{stdout: string, stderr: string, code?: number}} */
   let execResult;
   try {
-    execResult = await execFileAsync(command, args);
+    execResult = await execFileAsync(command, args, {env});
   } catch (e) {
     // exec-thrown errors have stdout, stderr, and exit code from child process.
     execResult = e;

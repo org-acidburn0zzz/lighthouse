@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2017 Google Inc. All Rights Reserved.
+ * Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ class CategoryRenderer {
    * Populate an DOM tree with audit details. Used by renderAudit and renderOpportunity
    * @param {LH.ReportResult.AuditRef} audit
    * @param {DocumentFragment} tmpl
-   * @return {Element}
+   * @return {!Element}
    */
   populateAuditValues(audit, tmpl) {
     const strings = Util.i18n.strings;
@@ -156,7 +156,7 @@ class CategoryRenderer {
    * @param {Element} element DOM node to populate with values.
    * @param {number|null} score
    * @param {string} scoreDisplayMode
-   * @return {Element}
+   * @return {!Element}
    */
   _setRatingClass(element, score, scoreDisplayMode) {
     const rating = Util.calculateRating(score, scoreDisplayMode);
@@ -277,7 +277,7 @@ class CategoryRenderer {
    * in a collapsed state.
    * @param {Exclude<TopLevelClumpId, 'failed'>} clumpId
    * @param {{auditRefs: Array<LH.ReportResult.AuditRef>, description?: string}} clumpOpts
-   * @return {Element}
+   * @return {!Element}
    */
   renderClump(clumpId, {auditRefs, description}) {
     const clumpTmpl = this.dom.cloneTemplate('#tmpl-lh-clump', this.templateContext);
@@ -328,7 +328,6 @@ class CategoryRenderer {
     const tmpl = this.dom.cloneTemplate('#tmpl-lh-gauge', this.templateContext);
     const wrapper = /** @type {HTMLAnchorElement} */ (this.dom.find('.lh-gauge__wrapper', tmpl));
     wrapper.href = `#${category.id}`;
-    wrapper.classList.add(`lh-gauge__wrapper--${Util.calculateRating(category.score)}`);
 
     if (Util.isPluginCategory(category.id)) {
       wrapper.classList.add('lh-gauge__wrapper--plugin');
@@ -350,8 +349,26 @@ class CategoryRenderer {
       percentageEl.title = Util.i18n.strings.errorLabel;
     }
 
+    // Render a numerical score if the category has applicable audits, or no audits whatsoever.
+    if (category.auditRefs.length === 0 || this.hasApplicableAudits(category)) {
+      wrapper.classList.add(`lh-gauge__wrapper--${Util.calculateRating(category.score)}`);
+    } else {
+      wrapper.classList.add(`lh-gauge__wrapper--not-applicable`);
+      percentageEl.textContent = '-';
+      percentageEl.title = Util.i18n.strings.notApplicableAuditsGroupTitle;
+    }
+
     this.dom.find('.lh-gauge__label', tmpl).textContent = category.title;
     return tmpl;
+  }
+
+  /**
+   * Returns true if an LH category has any non-"notApplicable" audits.
+   * @param {LH.ReportResult.Category} category
+   * @return {boolean}
+   */
+  hasApplicableAudits(category) {
+    return category.auditRefs.some(ref => ref.result.scoreDisplayMode !== 'notApplicable');
   }
 
   /**

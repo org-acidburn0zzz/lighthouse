@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -139,22 +139,33 @@ class PageDependencyGraph {
   }
 
   /**
-   * @param {Node} rootNode
+   * @param {NetworkNode} rootNode
    * @param {NetworkNodeOutput} networkNodeOutput
    */
   static linkNetworkNodes(rootNode, networkNodeOutput) {
     networkNodeOutput.nodes.forEach(node => {
+      const directInitiatorRequest = node.record.initiatorRequest || rootNode.record;
+      const directInitiatorNode =
+        networkNodeOutput.idToNodeMap.get(directInitiatorRequest.requestId) || rootNode;
       const initiators = PageDependencyGraph.getNetworkInitiators(node.record);
       if (initiators.length) {
         initiators.forEach(initiator => {
-          const parentCandidates = networkNodeOutput.urlToNodeMap.get(initiator) || [rootNode];
-          // Only add the initiator relationship if the initiator is unambiguous
-          const parent = parentCandidates.length === 1 ? parentCandidates[0] : rootNode;
-          node.addDependency(parent);
+          const parentCandidates = networkNodeOutput.urlToNodeMap.get(initiator) || [];
+          // Only add the edge if the parent is unambiguous with valid timing and isn't circular.
+          if (parentCandidates.length === 1 &&
+              parentCandidates[0].startTime <= node.startTime &&
+              !parentCandidates[0].isDependentOn(node)) {
+            node.addDependency(parentCandidates[0]);
+          } else if (!directInitiatorNode.isDependentOn(node)) {
+            directInitiatorNode.addDependent(node);
+          }
         });
-      } else if (node !== rootNode) {
-        rootNode.addDependent(node);
+      } else if (!directInitiatorNode.isDependentOn(node)) {
+        directInitiatorNode.addDependent(node);
       }
+
+      // Make sure the nodes are attached to the graph if the initiator information was invalid.
+      if (node !== rootNode && node.getDependencies().length === 0) node.addDependency(rootNode);
 
       if (!node.record.redirects) return;
 
@@ -242,12 +253,12 @@ class PageDependencyGraph {
 
         switch (evt.name) {
           case 'TimerInstall':
-            // @ts-ignore - 'TimerInstall' event means timerId exists.
+            // @ts-expect-error - 'TimerInstall' event means timerId exists.
             timers.set(evt.args.data.timerId, node);
             stackTraceUrls.forEach(url => addDependencyOnUrl(node, url));
             break;
           case 'TimerFire': {
-            // @ts-ignore - 'TimerFire' event means timerId exists.
+            // @ts-expect-error - 'TimerFire' event means timerId exists.
             const installer = timers.get(evt.args.data.timerId);
             if (!installer || installer.endTime > node.startTime) break;
             installer.addDependent(node);
@@ -262,17 +273,17 @@ class PageDependencyGraph {
 
           case 'EvaluateScript':
             addDependencyOnFrame(node, evt.args.data.frame);
-            // @ts-ignore - 'EvaluateScript' event means argsUrl is defined.
+            // @ts-expect-error - 'EvaluateScript' event means argsUrl is defined.
             addDependencyOnUrl(node, argsUrl);
             stackTraceUrls.forEach(url => addDependencyOnUrl(node, url));
             break;
 
           case 'XHRReadyStateChange':
             // Only create the dependency if the request was completed
-            // @ts-ignore - 'XHRReadyStateChange' event means readyState is defined.
+            // 'XHRReadyStateChange' event means readyState is defined.
             if (evt.args.data.readyState !== 4) break;
 
-            // @ts-ignore - 'XHRReadyStateChange' event means argsUrl is defined.
+            // @ts-expect-error - 'XHRReadyStateChange' event means argsUrl is defined.
             addDependencyOnUrl(node, argsUrl);
             stackTraceUrls.forEach(url => addDependencyOnUrl(node, url));
             break;
@@ -280,19 +291,19 @@ class PageDependencyGraph {
           case 'FunctionCall':
           case 'v8.compile':
             addDependencyOnFrame(node, evt.args.data.frame);
-            // @ts-ignore - events mean argsUrl is defined.
+            // @ts-expect-error - events mean argsUrl is defined.
             addDependencyOnUrl(node, argsUrl);
             break;
 
           case 'ParseAuthorStyleSheet':
             addDependencyOnFrame(node, evt.args.data.frame);
-            // @ts-ignore - 'ParseAuthorStyleSheet' event means styleSheetUrl is defined.
+            // @ts-expect-error - 'ParseAuthorStyleSheet' event means styleSheetUrl is defined.
             addDependencyOnUrl(node, evt.args.data.styleSheetUrl);
             break;
 
           case 'ResourceSendRequest':
             addDependencyOnFrame(node, evt.args.data.frame);
-            // @ts-ignore - 'ResourceSendRequest' event means requestId is defined.
+            // @ts-expect-error - 'ResourceSendRequest' event means requestId is defined.
             addDependentNetworkRequest(node, evt.args.data.requestId);
             stackTraceUrls.forEach(url => addDependencyOnUrl(node, url));
             break;
@@ -421,7 +432,7 @@ class PageDependencyGraph {
       const length = Math.ceil((node.endTime - node.startTime) / timePerCharacter);
       const bar = padRight('', offset) + padRight('', length, '=');
 
-      // @ts-ignore -- disambiguate displayName from across possible Node types.
+      // @ts-expect-error -- disambiguate displayName from across possible Node types.
       const displayName = node.record ? node.record.url : node.type;
       // eslint-disable-next-line
       console.log(padRight(bar, widthInCharacters), `| ${displayName.slice(0, 30)}`);

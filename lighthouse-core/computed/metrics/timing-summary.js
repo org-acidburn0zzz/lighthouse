@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2019 Google Inc. All Rights Reserved.
+ * @license Copyright 2019 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -52,6 +52,10 @@ class TimingSummary {
     const estimatedInputLatency = await EstimatedInputLatency.request(metricComputationData, context); // eslint-disable-line max-len
     const totalBlockingTime = await TotalBlockingTime.request(metricComputationData, context); // eslint-disable-line max-len
 
+    const cumulativeLayoutShiftValue = cumulativeLayoutShift &&
+      cumulativeLayoutShift.value !== null ?
+      cumulativeLayoutShift.value : undefined;
+
     /** @type {LH.Artifacts.TimingSummary} */
     const metrics = {
       // Include the simulated/observed performance metrics
@@ -71,12 +75,15 @@ class TimingSummary {
       estimatedInputLatencyTs: estimatedInputLatency.timestamp,
       totalBlockingTime: totalBlockingTime.timing,
       maxPotentialFID: maxPotentialFID && maxPotentialFID.timing,
-      cumulativeLayoutShift: cumulativeLayoutShift && cumulativeLayoutShift.value !== null ?
-        cumulativeLayoutShift.value : undefined,
+      cumulativeLayoutShift: cumulativeLayoutShiftValue,
 
       // Include all timestamps of interest from trace of tab
-      observedNavigationStart: traceOfTab.timings.navigationStart,
-      observedNavigationStartTs: traceOfTab.timestamps.navigationStart,
+      observedTimeOrigin: traceOfTab.timings.timeOrigin,
+      observedTimeOriginTs: traceOfTab.timestamps.timeOrigin,
+      // For now, navigationStart is always timeOrigin.
+      // These properties might be undefined in a future major version, but preserve them for now.
+      observedNavigationStart: traceOfTab.timings.timeOrigin,
+      observedNavigationStartTs: traceOfTab.timestamps.timeOrigin,
       observedFirstPaint: traceOfTab.timings.firstPaint,
       observedFirstPaintTs: traceOfTab.timestamps.firstPaint,
       observedFirstContentfulPaint: traceOfTab.timings.firstContentfulPaint,
@@ -91,8 +98,7 @@ class TimingSummary {
       observedLoadTs: traceOfTab.timestamps.load,
       observedDomContentLoaded: traceOfTab.timings.domContentLoaded,
       observedDomContentLoadedTs: traceOfTab.timestamps.domContentLoaded,
-      observedCumulativeLayoutShift: traceOfTab.timings.cumulativeLayoutShift,
-      observedCumulativeLayoutShiftTs: traceOfTab.timestamps.cumulativeLayoutShift,
+      observedCumulativeLayoutShift: cumulativeLayoutShiftValue,
 
       // Include some visual metrics from speedline
       observedFirstVisualChange: speedline.first,

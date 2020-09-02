@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -7,6 +7,7 @@
 import _CategoryRenderer = require('../lighthouse-core/report/html/renderer/category-renderer.js');
 import _CriticalRequestChainRenderer = require('../lighthouse-core/report/html/renderer/crc-details-renderer.js');
 import _SnippetRenderer = require('../lighthouse-core/report/html/renderer/snippet-renderer.js');
+import _ElementScreenshotRenderer = require('../lighthouse-core/report/html/renderer/element-screenshot-renderer.js');
 import _DetailsRenderer = require('../lighthouse-core/report/html/renderer/details-renderer.js');
 import _DOM = require('../lighthouse-core/report/html/renderer/dom.js');
 import _I18n = require('../lighthouse-core/report/html/renderer/i18n.js');
@@ -22,6 +23,7 @@ declare global {
   var CategoryRenderer: typeof _CategoryRenderer;
   var CriticalRequestChainRenderer: typeof _CriticalRequestChainRenderer;
   var SnippetRenderer: typeof _SnippetRenderer;
+  var ElementScreenshotRenderer: typeof _ElementScreenshotRenderer
   var DetailsRenderer: typeof _DetailsRenderer;
   var DOM: typeof _DOM;
   var getFilenamePrefix: typeof _FileNamer.getFilenamePrefix;
@@ -37,6 +39,7 @@ declare global {
     CategoryRenderer: typeof _CategoryRenderer;
     CriticalRequestChainRenderer: typeof _CriticalRequestChainRenderer;
     SnippetRenderer: typeof _SnippetRenderer;
+    ElementScreenshotRenderer: typeof _ElementScreenshotRenderer
     DetailsRenderer: typeof _DetailsRenderer;
     DOM: typeof _DOM;
     I18n: typeof _I18n;

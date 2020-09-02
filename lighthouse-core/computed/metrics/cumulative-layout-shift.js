@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2019 Google Inc. All Rights Reserved.
+ * @license Copyright 2019 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -40,13 +40,28 @@ class CumulativeLayoutShift {
       };
     }
 
-    const cumulativeLayoutShift =
+    let cumulativeLayoutShift =
       finalLayoutShift.args &&
       finalLayoutShift.args.data &&
       finalLayoutShift.args.data.cumulative_score;
 
     if (cumulativeLayoutShift === undefined) {
       throw new LHError(LHError.errors.LAYOUT_SHIFT_MISSING_DATA);
+    }
+
+    // Chromium will set `had_recent_input` if there was recent user input, which
+    // skips shift events from contributing to CLS. This flag is also set when Lighthouse changes
+    // the emulation size. This consistently results in the first few shift event always being
+    // ignored for CLS. Since we don't expect any user input, we add the score of these
+    // shift events to CLS.
+    // See https://bugs.chromium.org/p/chromium/issues/detail?id=1094974.
+    for (let i = 0; i < traceOfTab.mainThreadEvents.length; i++) {
+      const evt = traceOfTab.mainThreadEvents[i];
+      if (evt.name === 'LayoutShift' && evt.args && evt.args.data && evt.args.data.is_main_frame) {
+        if (!evt.args.data.had_recent_input) break;
+        if (typeof evt.args.data.score !== 'number') continue;
+        cumulativeLayoutShift += evt.args.data.score;
+      }
     }
 
     return {

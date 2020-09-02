@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2016 Google Inc. All Rights Reserved.
+ * @license Copyright 2016 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -10,9 +10,6 @@ const Connection = require('../../gather/connections/connection.js');
 const LHElement = require('../../lib/lh-element.js');
 const {protocolGetVersionResponse} = require('./fake-driver.js');
 const {createMockSendCommandFn, createMockOnceFn} = require('./mock-commands.js');
-
-const redirectDevtoolsLog = /** @type {LH.Protocol.RawEventMessage[]} */ (
-  require('../fixtures/wikipedia-redirect.devtoolslog.json'));
 
 /* eslint-env jest */
 
@@ -66,7 +63,7 @@ function createDecomposedPromise() {
     resolve = r1;
     reject = r2;
   });
-  // @ts-ignore: Ignore 'unused' error.
+  // @ts-expect-error: Ignore 'unused' error.
   return {promise, resolve, reject};
 }
 
@@ -125,7 +122,7 @@ async function flushAllTimersAndMicrotasks(ms = 1000) {
  * @typedef DriverMockMethods
  * @property {ReturnType<typeof createMockOnceFn>} on
  * @property {ReturnType<typeof createMockOnceFn>} once
- * @property {ReturnType<typeof createMockWaitForFn>} _waitForFCP
+ * @property {ReturnType<typeof createMockWaitForFn>} _waitForFcp
  * @property {ReturnType<typeof createMockWaitForFn>} _waitForLoadEvent
  * @property {ReturnType<typeof createMockWaitForFn>} _waitForNetworkIdle
  * @property {ReturnType<typeof createMockWaitForFn>} _waitForCPUIdle
@@ -133,7 +130,7 @@ async function flushAllTimersAndMicrotasks(ms = 1000) {
  * @property {(...args: RecursivePartial<Parameters<Driver['goOnline']>>) => ReturnType<Driver['goOnline']>} goOnline
 */
 
-/** @typedef {Driver & DriverMockMethods} TestDriver */
+/** @typedef {Omit<Driver, keyof DriverMockMethods> & DriverMockMethods} TestDriver */
 
 /** @type {TestDriver} */
 let driver;
@@ -141,13 +138,13 @@ let driver;
 let connectionStub;
 
 beforeEach(() => {
-  // @ts-ignore - connectionStub has a mocked version of sendCommand implemented in each test
+  // @ts-expect-error - connectionStub has a mocked version of sendCommand implemented in each test
   connectionStub = new Connection();
-  // @ts-ignore
+  // @ts-expect-error
   connectionStub.sendCommand = cmd => {
     throw new Error(`${cmd} not implemented`);
   };
-  // @ts-ignore - driver has a mocked version of on/once implemented in each test
+  // @ts-expect-error - driver has a mocked version of on/once implemented in each test
   driver = new Driver(connectionStub);
 });
 
@@ -168,25 +165,6 @@ describe('.querySelector(All)', () => {
 
     const result = await driver.querySelector('meta head');
     expect(result).toBeInstanceOf(LHElement);
-  });
-
-  it('returns [] when DOM.querySelectorAll finds no node', async () => {
-    connectionStub.sendCommand = createMockSendCommandFn()
-      .mockResponse('DOM.getDocument', {root: {nodeId: 249}})
-      .mockResponse('DOM.querySelectorAll', {nodeIds: []});
-
-    const result = await driver.querySelectorAll('#no.matches');
-    expect(result).toEqual([]);
-  });
-
-  it('returns element when DOM.querySelectorAll finds node', async () => {
-    connectionStub.sendCommand = createMockSendCommandFn()
-      .mockResponse('DOM.getDocument', {root: {nodeId: 249}})
-      .mockResponse('DOM.querySelectorAll', {nodeIds: [231]});
-
-    const result = await driver.querySelectorAll('#no.matches');
-    expect(result).toHaveLength(1);
-    expect(result[0]).toBeInstanceOf(LHElement);
   });
 });
 
@@ -227,7 +205,7 @@ describe('.getRequestContent', () => {
   it('throws if getRequestContent takes too long', async () => {
     const mockTimeout = 5000;
     const driverTimeout = 1000;
-    // @ts-ignore
+    // @ts-expect-error
     connectionStub.sendCommand = jest.fn()
       .mockImplementation(() => new Promise(r => setTimeout(r, mockTimeout)));
 
@@ -330,7 +308,7 @@ describe('.evaluateAsync', () => {
 describe('.sendCommand', () => {
   it('.sendCommand timesout when commands take too long', async () => {
     const mockTimeout = 5000;
-    // @ts-ignore
+    // @ts-expect-error
     connectionStub.sendCommand = jest.fn()
       .mockImplementation(() => new Promise(r => setTimeout(r, mockTimeout)));
 
@@ -386,7 +364,7 @@ describe('.beginTrace', () => {
     await driver.beginTrace();
 
     const tracingStartArgs = connectionStub.sendCommand.findInvocation('Tracing.start');
-    // m70 doesn't have disabled-by-default-lighthouse, so 'toplevel' is used instead.
+    // COMPAT: m70 doesn't have disabled-by-default-lighthouse, so 'toplevel' is used instead.
     expect(tracingStartArgs.categories).toContain('toplevel');
     expect(tracingStartArgs.categories).not.toContain('disabled-by-default-lighthouse');
   });
@@ -479,62 +457,43 @@ describe('.gotoURL', () => {
       .mockResponse('Emulation.setScriptExecutionDisabled')
       .mockResponse('Page.navigate')
       .mockResponse('Target.setAutoAttach')
-      .mockResponse('Runtime.evaluate');
+      .mockResponse('Runtime.evaluate')
+      .mockResponse('Page.getResourceTree', {frameTree: {frame: {id: 'ABC'}}});
   });
 
   it('will track redirects through gotoURL load', async () => {
-    const delay = () => new Promise(resolve => setTimeout(resolve));
+    driver.on = driver.once = createMockOnceFn();
 
-    class ReplayConnection extends Connection {
-      connect() {
-        return Promise.resolve();
-      }
-      disconnect() {
-        return Promise.resolve();
-      }
-      replayLog() {
-        redirectDevtoolsLog.forEach(msg => this.emitProtocolEvent(msg));
-      }
-      /**
-       * @param {string} method
-       * @param {any} _
-       */
-      sendCommand(method, _) {
-        const resolve = Promise.resolve();
-
-        // If navigating, wait, then replay devtools log in parallel to resolve.
-        if (method === 'Page.navigate') {
-          resolve.then(delay).then(_ => this.replayLog());
-        }
-
-        return resolve;
-      }
-    }
-    const replayConnection = new ReplayConnection();
-
-    const driver = /** @type {TestDriver} */ (new Driver(replayConnection));
-
-    // Redirect in log will go through
-    const startUrl = 'http://en.wikipedia.org/';
-    // then https://en.wikipedia.org/
-    // then https://en.wikipedia.org/wiki/Main_Page
-    const finalUrl = 'https://en.m.wikipedia.org/wiki/Main_Page';
-
+    const url = 'https://www.example.com';
     const loadOptions = {
-      waitForLoad: true,
-      passContext: {
-        passConfig: {
-          pauseAfterLoadMs: 0,
-          networkQuietThresholdMs: 0,
-          cpuQuietThresholdMs: 0,
-        },
-      },
+      waitForNavigated: true,
     };
-    const loadPromise = driver.gotoURL(startUrl, loadOptions);
 
+    const loadPromise = makePromiseInspectable(driver.gotoURL(url, loadOptions));
     await flushAllTimersAndMicrotasks();
-    const loadedUrl = await loadPromise;
-    expect(loadedUrl).toEqual(finalUrl);
+    expect(loadPromise).not.toBeDone('Did not wait for frameNavigated');
+
+    // Use `findListener` instead of `mockEvent` so we can control exactly when the promise resolves
+    const loadListener = driver.on.findListener('Page.frameNavigated');
+
+    /** @param {LH.Crdp.Page.Frame} frame */
+    const navigate = frame => driver._eventEmitter.emit('Page.frameNavigated', {frame});
+    const baseFrame = {id: 'ABC', loaderId: '', securityOrigin: '', mimeType: 'text/html'};
+    navigate({...baseFrame, url: 'http://example.com'});
+    navigate({...baseFrame, url: 'https://example.com'});
+    navigate({...baseFrame, url: 'https://www.example.com'});
+    navigate({...baseFrame, url: 'https://m.example.com'});
+    navigate({...baseFrame, id: 'ad1', url: 'https://frame-a.example.com'});
+    navigate({...baseFrame, url: 'https://m.example.com/client'});
+    navigate({...baseFrame, id: 'ad2', url: 'https://frame-b.example.com'});
+    navigate({...baseFrame, id: 'ad3', url: 'https://frame-c.example.com'});
+
+    loadListener();
+    await flushAllTimersAndMicrotasks();
+    expect(loadPromise).toBeDone('Did not resolve after frameNavigated');
+
+    const results = await loadPromise;
+    expect(results.finalUrl).toEqual('https://m.example.com/client');
   });
 
   describe('when waitForNavigated', () => {
@@ -563,24 +522,24 @@ describe('.gotoURL', () => {
   describe('when waitForLoad', () => {
     const url = 'https://example.com';
 
-    ['FCP', 'LoadEvent', 'NetworkIdle', 'CPUIdle'].forEach(name => {
+    ['Fcp', 'LoadEvent', 'NetworkIdle', 'CPUIdle'].forEach(name => {
       it(`should wait for ${name}`, async () => {
-        driver._waitForFCP = createMockWaitForFn();
+        driver._waitForFcp = createMockWaitForFn();
         driver._waitForLoadEvent = createMockWaitForFn();
         driver._waitForNetworkIdle = createMockWaitForFn();
         driver._waitForCPUIdle = createMockWaitForFn();
 
-        // @ts-ignore - dynamic property access, tests will definitely fail if the property were to change
+        // @ts-expect-error - dynamic property access, tests will definitely fail if the property were to change
         const waitForResult = driver[`_waitFor${name}`];
         const otherWaitForResults = [
-          driver._waitForFCP,
+          driver._waitForFcp,
           driver._waitForLoadEvent,
           driver._waitForNetworkIdle,
           driver._waitForCPUIdle,
         ].filter(l => l !== waitForResult);
 
         const loadPromise = makePromiseInspectable(driver.gotoURL(url, {
-          waitForFCP: true,
+          waitForFcp: true,
           waitForLoad: true,
         }));
 
@@ -596,7 +555,7 @@ describe('.gotoURL', () => {
         waitForResult.mockResolve();
         await flushAllTimersAndMicrotasks();
         expect(loadPromise).toBeDone(`Did not resolve on ${name}`);
-        await loadPromise;
+        expect(await loadPromise).toMatchObject({timedOut: false});
       });
     });
 
@@ -626,7 +585,7 @@ describe('.gotoURL', () => {
       driver._waitForCPUIdle.mockResolve();
       await flushAllTimersAndMicrotasks();
       expect(loadPromise).toBeDone(`Did not resolve on CPU idle`);
-      await loadPromise;
+      expect(await loadPromise).toMatchObject({timedOut: false});
     });
 
     it('should timeout when not resolved fast enough', async () => {
@@ -657,6 +616,7 @@ describe('.gotoURL', () => {
       expect(driver._waitForLoadEvent.getMockCancelFn()).toHaveBeenCalled();
       expect(driver._waitForNetworkIdle.getMockCancelFn()).toHaveBeenCalled();
       expect(driver._waitForCPUIdle.getMockCancelFn()).toHaveBeenCalled();
+      expect(await loadPromise).toMatchObject({timedOut: true});
     });
 
     it('should cleanup listeners even when waits reject', async () => {
@@ -674,11 +634,11 @@ describe('.gotoURL', () => {
   });
 });
 
-describe('._waitForFCP', () => {
+describe('._waitForFcp', () => {
   it('should not resolve until FCP fires', async () => {
     driver.on = driver.once = createMockOnceFn();
 
-    const waitPromise = makePromiseInspectable(driver._waitForFCP(60 * 1000).promise);
+    const waitPromise = makePromiseInspectable(driver._waitForFcp(0, 60 * 1000).promise);
     const listener = driver.on.findListener('Page.lifecycleEvent');
 
     await flushAllTimersAndMicrotasks();
@@ -694,10 +654,30 @@ describe('._waitForFCP', () => {
     await waitPromise;
   });
 
+  it('should wait for pauseAfterFcpMs after FCP', async () => {
+    driver.on = driver.once = createMockOnceFn();
+
+    const waitPromise = makePromiseInspectable(driver._waitForFcp(5000, 60 * 1000).promise);
+    const listener = driver.on.findListener('Page.lifecycleEvent');
+
+    await flushAllTimersAndMicrotasks();
+    expect(waitPromise).not.toBeDone('Resolved without FCP');
+
+    listener({name: 'firstContentfulPaint'});
+    await flushAllTimersAndMicrotasks();
+    expect(waitPromise).not.toBeDone('Did not wait for pauseAfterFcpMs');
+
+    jest.advanceTimersByTime(5001);
+    await flushAllTimersAndMicrotasks();
+    expect(waitPromise).toBeDone('Did not resolve after pauseAfterFcpMs');
+
+    await waitPromise;
+  });
+
   it('should timeout', async () => {
     driver.on = driver.once = createMockOnceFn();
 
-    const waitPromise = makePromiseInspectable(driver._waitForFCP(5000).promise);
+    const waitPromise = makePromiseInspectable(driver._waitForFcp(0, 5000).promise);
 
     await flushAllTimersAndMicrotasks();
     expect(waitPromise).not.toBeDone('Resolved before timeout');
@@ -712,7 +692,7 @@ describe('._waitForFCP', () => {
     driver.on = driver.once = createMockOnceFn();
     driver.off = jest.fn();
 
-    const {promise: rawPromise, cancel} = driver._waitForFCP(5000);
+    const {promise: rawPromise, cancel} = driver._waitForFcp(0, 5000);
     const waitPromise = makePromiseInspectable(rawPromise);
 
     await flushAllTimersAndMicrotasks();
@@ -994,7 +974,7 @@ describe('Multi-target management', () => {
 
     driver._eventEmitter.emit('Target.attachedToTarget', {
       sessionId: '123',
-      // @ts-ignore: Ignore partial targetInfo.
+      // @ts-expect-error: Ignore partial targetInfo.
       targetInfo: {type: 'iframe'},
     });
     await flushAllTimersAndMicrotasks();
@@ -1012,7 +992,7 @@ describe('Multi-target management', () => {
 
     driver._eventEmitter.emit('Target.attachedToTarget', {
       sessionId: 'SW1',
-      // @ts-ignore: Ignore partial targetInfo.
+      // @ts-expect-error: Ignore partial targetInfo.
       targetInfo: {type: 'service_worker'},
     });
     await flushAllTimersAndMicrotasks();

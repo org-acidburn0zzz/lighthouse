@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2020 Google Inc. All Rights Reserved.
+ * @license Copyright 2020 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -11,15 +11,15 @@
  * @fileoverview - Used to manually examine the polyfills/transforms used on a page.
  *
  * USAGE:
- *   1. Run `yarn start <url to examine> -G
+ *   1. Run `yarn start <url to examine> -G`
  *   2. Run `node ./lighthouse-core/scripts/legacy-javascript/examine-latest-run.js`
  *   3. Inspect output for fishy looking polyfills.
  */
 
 const path = require('path');
-// @ts-ignore - We don't really need types for this
+// @ts-expect-error - We don't really need types for this
 const colors = require('colors');
-const LegacyJavascript = require('../../audits/legacy-javascript.js');
+const LegacyJavascript = require('../../audits/byte-efficiency/legacy-javascript.js');
 
 const LH_ROOT_DIR = path.join(__dirname, '../../../');
 const LATEST_RUN_DIR = path.join(LH_ROOT_DIR, 'latest-run');
@@ -49,7 +49,6 @@ async function main() {
     computedCache: new Map(),
     options: {},
     settings: /** @type {any} */ ({}),
-    LighthouseRunWarnings: [],
   });
 
   const items =

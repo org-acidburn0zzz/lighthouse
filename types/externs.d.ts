@@ -1,35 +1,11 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 
 import _Crdp from 'devtools-protocol/types/protocol';
 import _CrdpMappings from 'devtools-protocol/types/protocol-mapping'
-
-// Convert unions (T1 | T2 | T3) into tuples ([T1, T2, T3]).
-// https://stackoverflow.com/a/52933137/2788187 https://stackoverflow.com/a/50375286
-type UnionToIntersection<U> =
-(U extends any ? (k: U)=>void : never) extends ((k: infer I)=>void) ? I : never
-
-type UnionToFunctions<U> =
-  U extends unknown ? (k: U) => void : never;
-
-type IntersectionOfFunctionsToType<F> =
-  F extends { (a: infer A): void; (b: infer B): void; (c: infer C): void; (d: infer D): void; } ? [A, B, C, D] :
-  F extends { (a: infer A): void; (b: infer B): void; (c: infer C): void; } ? [A, B, C] :
-  F extends { (a: infer A): void; (b: infer B): void; } ? [A, B] :
-  F extends { (a: infer A): void } ? [A] :
-  never;
-
-type SplitType<T> =
-  IntersectionOfFunctionsToType<UnionToIntersection<UnionToFunctions<T>>>;
-
-// (T1 | T2 | T3) -> [RecursivePartial(T1), RecursivePartial(T2), RecursivePartial(T3)]
-type RecursivePartialUnion<T, S=SplitType<T>> = {[P in keyof S]: RecursivePartial<S[P]>};
-
-// Return length of a tuple.
-type GetLength<T extends any[]> = T extends { length: infer L } ? L : never;
 
 declare global {
   // Augment Intl to include
@@ -51,29 +27,29 @@ declare global {
   };
 
   /** Make optional all properties on T and any properties on object properties of T. */
-  type RecursivePartial<T> = {
-    [P in keyof T]+?:
-      // RE: First two conditions.
-      // If type is a union, map each individual component and transform the resultant tuple back into a union.
-      // Only up to 4 components of a union is supported (all but the last few are dropped). For more, modify the second condition
-      // and `IntersectionOfFunctionsToType`.
-      // Ex: `{passes: PassJson[] | null}` - T[P] doesn't exactly match the array-recursing condition, so without these first couple
-      // conditions, it would fall through to the last condition (would just return T[P]).
+  type RecursivePartial<T> =
+    // Recurse into arrays and tuples: elements aren't (newly) optional, but any properties they have are.
+    T extends (infer U)[] ? RecursivePartial<U>[] :
+    // Recurse into objects: properties and any of their properties are optional.
+    T extends object ? {[P in keyof T]?: RecursivePartial<T[P]>} :
+    // Strings, numbers, etc. (terminal types) end here.
+    T;
 
-      // RE: First condition.
-      // Guard against large string unions, which would be unreasonable to support (much more than 4 components is common).
+  /** Recursively makes all properties of T read-only. */
+  export type Immutable<T> =
+    T extends Function ? T :
+    T extends Array<infer R> ? ImmutableArray<R> :
+    T extends Map<infer K, infer V> ? ImmutableMap<K, V> :
+    T extends Set<infer M> ? ImmutableSet<M> :
+    T extends object ? ImmutableObject<T> :
+    T
 
-      SplitType<T[P]> extends string[] ? T[P] :
-      GetLength<SplitType<T[P]>> extends 2|3|4 ? RecursivePartialUnion<T[P]>[number] :
-
-      // Recurse into arrays.
-      T[P] extends (infer U)[] ? RecursivePartial<U>[] :
-
-      // Recurse into objects.
-      T[P] extends (object|undefined) ? RecursivePartial<T[P]> :
-
-      // Strings, numbers, etc. (terminal types) end here.
-      T[P];
+  // Intermediate immutable types. Prefer e.g. Immutable<Set<T>> over direct use.
+  type ImmutableArray<T> = ReadonlyArray<Immutable<T>>;
+  type ImmutableMap<K, V> = ReadonlyMap<Immutable<K>, Immutable<V>>;
+  type ImmutableSet<T> = ReadonlySet<Immutable<T>>;
+  type ImmutableObject<T> = {
+    readonly [K in keyof T]: Immutable<T[K]>;
   };
 
   /**
@@ -192,7 +168,7 @@ declare global {
     export interface CliFlags extends Flags {
       _: string[];
       chromeIgnoreDefaultFlags: boolean;
-      chromeFlags: string;
+      chromeFlags: string | string[];
       /** Output path for the generated results. */
       outputPath: string;
       /** Flag to save the trace contents and screenshots to disk. */
@@ -206,7 +182,7 @@ declare global {
       /** Flag to print a list of all required trace categories. */
       listTraceCategories: boolean;
       /** A preset audit of selected audit categories to run. */
-      preset?: 'full'|'mixed-content'|'perf';
+      preset?: 'experimental'|'perf';
       /** A flag to enable logLevel 'verbose'. */
       verbose: boolean;
       /** A flag to enable logLevel 'silent'. */
@@ -257,6 +233,13 @@ declare global {
       [futureProps: string]: any;
     }
 
+    /** The type of the Profile & ProfileChunk event in Chromium traces. Note that this is subtly different from Crdp.Profiler.Profile. */
+    export interface TraceCpuProfile {
+      nodes?: Array<{id: number, callFrame: {functionName: string, url?: string}, parent?: number}>
+      samples?: Array<number>
+      timeDeltas?: Array<number>
+    }
+
     /**
      * @see https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview
      */
@@ -283,6 +266,10 @@ declare global {
           page?: string;
           readyState?: number;
           requestId?: string;
+          startTime?: number;
+          timeDeltas?: TraceCpuProfile['timeDeltas'];
+          cpuProfile?: TraceCpuProfile;
+          callFrame?: Required<TraceCpuProfile>['nodes'][0]['callFrame']
           stackTrace?: {
             url: string
           }[];
@@ -291,6 +278,17 @@ declare global {
           url?: string;
           is_main_frame?: boolean;
           cumulative_score?: number;
+          id?: string;
+          nodeId?: number;
+          impacted_nodes?: Array<{
+            node_id: number,
+            old_rect?: Array<number>,
+            new_rect?: Array<number>,
+          }>;
+          score?: number,
+          had_recent_input?: boolean;
+          compositeFailed?: number;
+          unsupportedProperties?: string[];
         };
         frame?: string;
         name?: string;
@@ -298,11 +296,15 @@ declare global {
       };
       pid: number;
       tid: number;
+      /** Timestamp of the event in microseconds. */
       ts: number;
       dur: number;
       ph: 'B'|'b'|'D'|'E'|'e'|'F'|'I'|'M'|'N'|'n'|'O'|'R'|'S'|'T'|'X';
       s?: 't';
       id?: string;
+      id2?: {
+        local?: string;
+      };
     }
 
     export interface DevToolsJsonTarget {

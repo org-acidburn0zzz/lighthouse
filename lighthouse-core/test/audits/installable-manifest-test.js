@@ -1,12 +1,12 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 'use strict';
 
 const InstallableManifestAudit = require('../../audits/installable-manifest.js');
-const assert = require('assert');
+const assert = require('assert').strict;
 const manifestParser = require('../../lib/manifest-parser.js');
 
 const manifestSrc = JSON.stringify(require('../fixtures/manifest.json'));
@@ -41,6 +41,16 @@ describe('PWA: webapp install banner audit', () => {
       return InstallableManifestAudit.audit(artifacts, context).then(result => {
         assert.strictEqual(result.score, 0);
         assert.ok(result.explanation.includes('No manifest was fetched'), result.explanation);
+      });
+    });
+
+    it('passes when manifest url matches', () => {
+      const artifacts = generateMockArtifacts();
+      const context = generateMockAuditContext();
+
+      return InstallableManifestAudit.audit(artifacts, context).then(result => {
+        assert.strictEqual(artifacts.WebAppManifest.url, EXAMPLE_MANIFEST_URL);
+        assert.strictEqual(result.details.items[0].manifestUrl, EXAMPLE_MANIFEST_URL);
       });
     });
 

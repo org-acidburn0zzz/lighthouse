@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2016 Google Inc. All Rights Reserved.
+ * @license Copyright 2016 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -24,6 +24,11 @@ const UIStrings = {
   warningRedirected: 'The page may not be loading as expected because your test URL ' +
   `({requested}) was redirected to {final}. ` +
   'Try testing the second URL directly.',
+  /**
+   * @description Warning that Lighthouse timed out while waiting for the page to load.
+   */
+  warningTimeout: 'The page loaded too slowly to finish within the time limit. ' +
+  'Results may be incomplete.',
 };
 
 const str_ = i18n.createMessageInstanceIdFn(__filename, UIStrings);
@@ -76,12 +81,13 @@ class GatherRunner {
     };
     log.time(status);
     try {
-      const finalUrl = await driver.gotoURL(passContext.url, {
-        waitForFCP: passContext.passConfig.recordTrace,
+      const {finalUrl, timedOut} = await driver.gotoURL(passContext.url, {
+        waitForFcp: passContext.passConfig.recordTrace,
         waitForLoad: true,
         passContext,
       });
       passContext.url = finalUrl;
+      if (timedOut) passContext.LighthouseRunWarnings.push(str_(UIStrings.warningTimeout));
     } catch (err) {
       // If it's one of our loading-based LHErrors, we'll treat it as a page load error.
       if (err.code === 'NO_FCP' || err.code === 'PAGE_HUNG') {
@@ -112,6 +118,7 @@ class GatherRunner {
     await driver.cacheNatives();
     await driver.registerPerformanceObserver();
     await driver.dismissJavaScriptDialogs();
+    await driver.registerRequestIdleCallbackWrap(options.settings);
     if (resetStorage) await driver.clearDataForOrigin(options.requestedUrl);
     log.timeEnd(status);
   }
@@ -130,6 +137,11 @@ class GatherRunner {
       // If storage was cleared for the run, clear at the end so Lighthouse specifics aren't cached.
       const resetStorage = !options.settings.disableStorageReset;
       if (resetStorage) await driver.clearDataForOrigin(options.requestedUrl);
+
+      // Disable fetcher, in case a gatherer enabled it.
+      // This cleanup should be removed once the only usage of
+      // fetcher (fetching arbitrary URLs) is replaced by new protocol support.
+      await driver.fetcher.disableRequestInterception();
 
       await driver.disconnect();
     } catch (err) {
@@ -205,6 +217,26 @@ class GatherRunner {
   }
 
   /**
+   * Returns an error if we try to load a non-HTML page.
+   * @param {LH.Artifacts.NetworkRequest|undefined} mainRecord
+   * @return {LH.LighthouseError|undefined}
+   */
+  static getNonHtmlError(mainRecord) {
+    // MIME types are case-insenstive but Chrome normalizes MIME types to be lowercase.
+    const HTML_MIME_TYPE = 'text/html';
+
+    // If we never requested a document, there's no doctype error, let other cases handle it.
+    if (!mainRecord) return undefined;
+
+    // mimeType is determined by the browser, we assume Chrome is determining mimeType correctly,
+    // independently of 'Content-Type' response headers, and always sending mimeType if well-formed.
+    if (HTML_MIME_TYPE !== mainRecord.mimeType) {
+      return new LHError(LHError.errors.NOT_HTML, {mimeType: mainRecord.mimeType});
+    }
+    return undefined;
+  }
+
+  /**
    * Returns an error if the page load should be considered failed, e.g. from a
    * main document request failure, a security issue, etc.
    * @param {LH.Gatherer.PassContext} passContext
@@ -222,6 +254,7 @@ class GatherRunner {
 
     const networkError = GatherRunner.getNetworkError(mainRecord);
     const interstitialError = GatherRunner.getInterstitialError(mainRecord, networkRecords);
+    const nonHtmlError = GatherRunner.getNonHtmlError(mainRecord);
 
     // Check to see if we need to ignore the page load failure.
     // e.g. When the driver is offline, the load will fail without page offline support.
@@ -234,6 +267,9 @@ class GatherRunner {
     // Prefer networkError over navigationError.
     // Example: `DNS_FAILURE` is better than `NO_FCP`.
     if (networkError) return networkError;
+
+    // Error if page is not HTML.
+    if (nonHtmlError) return nonHtmlError;
 
     // Navigation errors are rather generic and express some failure of the page to render properly.
     // Use `navigationError` as the last resort.
@@ -441,7 +477,7 @@ class GatherRunner {
         // Take the last defined pass result as artifact. If none are defined, the undefined check below handles it.
         const definedResults = phaseResults.filter(element => element !== undefined);
         const artifact = definedResults[definedResults.length - 1];
-        // @ts-ignore tsc can't yet express that gathererName is only a single type in each iteration, not a union of types.
+        // @ts-expect-error tsc can't yet express that gathererName is only a single type in each iteration, not a union of types.
         gathererArtifacts[gathererName] = artifact;
       } catch (err) {
         // Return error to runner to handle turning it into an error audit.
@@ -505,11 +541,11 @@ class GatherRunner {
       await passContext.driver.sendCommand('Page.getInstallabilityErrors');
 
     let errors = response.installabilityErrors;
-    // Before M82, `getInstallabilityErrors` was not localized and just english
+    // COMPAT: Before M82, `getInstallabilityErrors` was not localized and just english
     // error strings were returned. Convert the values we care about to the new error id format.
     if (!errors) {
       /** @type {string[]} */
-      // @ts-ignore - Support older protocol data.
+      // @ts-expect-error - Support older protocol data.
       const m81StyleErrors = response.errors || [];
       errors = m81StyleErrors.map(error => {
         const englishErrorToErrorId = {
@@ -563,7 +599,7 @@ class GatherRunner {
       !!entry.params.request.headers['User-Agent']
     );
     if (userAgentEntry) {
-      // @ts-ignore - guaranteed to exist by the find above
+      // @ts-expect-error - guaranteed to exist by the find above
       baseArtifacts.NetworkUserAgent = userAgentEntry.params.request.headers['User-Agent'];
     }
   }
@@ -644,6 +680,12 @@ class GatherRunner {
           await GatherRunner.populateBaseArtifacts(passContext);
           isFirstPass = false;
         }
+
+        // Disable fetcher for every pass, in case a gatherer enabled it.
+        // Noop if fetcher was never enabled.
+        // This cleanup should be removed once the only usage of
+        // fetcher (fetching arbitrary URLs) is replaced by new protocol support.
+        await driver.fetcher.disableRequestInterception();
       }
 
       await GatherRunner.disposeDriver(driver, options);

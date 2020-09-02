@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2019 Google Inc. All Rights Reserved.
+ * @license Copyright 2019 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -66,7 +66,7 @@ describe('Performance: Resource budgets audit', () => {
       const item = result.details.items[0];
       expect(item.label).toBeDisplayString('Script');
       expect(item.requestCount).toBe(2);
-      expect(item.size).toBe(60);
+      expect(item.transferSize).toBe(60);
       expect(item.sizeOverBudget).toBe(60);
       expect(item.countOverBudget).toBeDisplayString('2 requests');
     });
@@ -119,7 +119,7 @@ describe('Performance: Resource budgets audit', () => {
           ],
         }];
         const result = await ResourceBudgetAudit.audit(artifacts, context);
-        expect(result.details.items[0].size).toBe(145);
+        expect(result.details.items[0].transferSize).toBe(145);
         expect(result.details.items[0].requestCount).toBe(3);
       });
 
@@ -143,7 +143,7 @@ describe('Performance: Resource budgets audit', () => {
           ],
         }];
         const result = await ResourceBudgetAudit.audit(artifacts, context);
-        expect(result.details.items[0].size).toBe(120);
+        expect(result.details.items[0].transferSize).toBe(120);
         expect(result.details.items[0].requestCount).toBe(2);
       });
     });
@@ -174,7 +174,7 @@ describe('Performance: Resource budgets audit', () => {
       const result = await ResourceBudgetAudit.audit(artifacts, context);
       const items = result.details.items;
       items.slice(0, -1).forEach((item, index) => {
-        expect(item.size).toBeGreaterThanOrEqual(items[index + 1].size);
+        expect(item.transferSize).toBeGreaterThanOrEqual(items[index + 1].transferSize);
       });
     });
   });

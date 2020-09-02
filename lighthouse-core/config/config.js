@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2016 Google Inc. All Rights Reserved.
+ * @license Copyright 2016 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -190,7 +190,7 @@ function cleanFlagsForSettings(flags = {}) {
 
   for (const key of Object.keys(flags)) {
     if (key in constants.defaultSettings) {
-      // @ts-ignore tsc can't yet express that key is only a single type in each iteration, not a union of types.
+      // @ts-expect-error tsc can't yet express that key is only a single type in each iteration, not a union of types.
       settings[key] = flags[key];
     }
   }
@@ -297,10 +297,12 @@ function deepCloneConfigJson(json) {
   return cloned;
 }
 
+/**
+ * @implements {LH.Config.Json}
+ */
 class Config {
   /**
    * @constructor
-   * @implements {LH.Config.Json}
    * @param {LH.Config.Json=} configJSON
    * @param {LH.Flags=} flags
    */
@@ -355,9 +357,6 @@ class Config {
     assertValidPasses(this.passes, this.audits);
     assertValidCategories(this.categories, this.audits, this.groups);
 
-    // TODO(bckenny): until tsc adds @implements support, assert that Config is a ConfigJson.
-    /** @type {LH.Config.Json} */
-    const configJson = this; // eslint-disable-line no-unused-vars
     log.timeEnd(status);
   }
 
@@ -373,10 +372,10 @@ class Config {
       for (const pass of jsonConfig.passes) {
         for (const gathererDefn of pass.gatherers) {
           gathererDefn.implementation = undefined;
-          // @ts-ignore Breaking the Config.GathererDefn type.
+          // @ts-expect-error Breaking the Config.GathererDefn type.
           gathererDefn.instance = undefined;
           if (Object.keys(gathererDefn.options).length === 0) {
-            // @ts-ignore Breaking the Config.GathererDefn type.
+            // @ts-expect-error Breaking the Config.GathererDefn type.
             gathererDefn.options = undefined;
           }
         }
@@ -385,10 +384,10 @@ class Config {
 
     if (jsonConfig.audits) {
       for (const auditDefn of jsonConfig.audits) {
-        // @ts-ignore Breaking the Config.AuditDefn type.
+        // @ts-expect-error Breaking the Config.AuditDefn type.
         auditDefn.implementation = undefined;
         if (Object.keys(auditDefn.options).length === 0) {
-          // @ts-ignore Breaking the Config.AuditDefn type.
+          // @ts-expect-error Breaking the Config.AuditDefn type.
           auditDefn.options = undefined;
         }
       }
@@ -546,6 +545,8 @@ class Config {
     const defaultPass = passes.find(pass => pass.passName === 'defaultPass');
     if (!defaultPass) return;
     const overrides = constants.nonSimulatedPassConfigOverrides;
+    defaultPass.pauseAfterFcpMs =
+      Math.max(overrides.pauseAfterFcpMs, defaultPass.pauseAfterFcpMs);
     defaultPass.pauseAfterLoadMs =
       Math.max(overrides.pauseAfterLoadMs, defaultPass.pauseAfterLoadMs);
     defaultPass.cpuQuietThresholdMs =
@@ -637,12 +638,12 @@ class Config {
       const category = deepClone(oldCategories[categoryId]);
 
       if (filterByIncludedCategory && filterByIncludedAudit) {
-        // If we're filtering to the category and audit whitelist, include the union of the two
+        // If we're filtering by category and audit, include the union of the two
         if (!categoryIds.includes(categoryId)) {
           category.auditRefs = category.auditRefs.filter(audit => auditIds.includes(audit.id));
         }
       } else if (filterByIncludedCategory) {
-        // If we're filtering to just the category whitelist and the category is not included, skip it
+        // If we're filtering by just category, and the category is not included, skip it
         if (!categoryIds.includes(categoryId)) {
           return;
         }
@@ -650,7 +651,7 @@ class Config {
         category.auditRefs = category.auditRefs.filter(audit => auditIds.includes(audit.id));
       }
 
-      // always filter to the audit blacklist
+      // always filter based on skipAuditIds
       category.auditRefs = category.auditRefs.filter(audit => !skipAuditIds.includes(audit.id));
 
       if (category.auditRefs.length) {

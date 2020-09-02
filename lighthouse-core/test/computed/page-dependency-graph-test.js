@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -12,7 +12,7 @@ const NetworkRequest = require('../../lib/network-request.js');
 const sampleTrace = require('../fixtures/traces/progressive-app-m60.json');
 const sampleDevtoolsLog = require('../fixtures/traces/progressive-app-m60.devtools.log.json');
 
-const assert = require('assert');
+const assert = require('assert').strict;
 
 function createRequest(
   requestId,
@@ -463,6 +463,35 @@ describe('PageDependencyGraph computed artifact:', () => {
       const request2 = createRequest(2, '2', 5);
       const request3 = createRequest(3, '3', 5);
       const request4 = createRequest(4, '4', 20);
+      // Set multiple initiator requests through script stack.
+      request4.initiator = {
+        type: 'script',
+        stack: {callFrames: [{url: '2'}], parent: {parent: {callFrames: [{url: '3'}]}}},
+      };
+      // Also set the initiatorRequest that Lighthouse's network-recorder.js creates.
+      // This should be ignored and only used as a fallback.
+      request4.initiatorRequest = request1;
+      const networkRecords = [request1, request2, request3, request4];
+
+      addTaskEvents(0, 0, []);
+
+      const graph = PageDependencyGraph.createGraph(traceOfTab, networkRecords);
+      const nodes = [];
+      graph.traverse(node => nodes.push(node));
+
+      assert.equal(nodes.length, 4);
+      assert.deepEqual(nodes.map(node => node.id), [1, 2, 3, 4]);
+      assert.deepEqual(nodes[0].getDependencies(), []);
+      assert.deepEqual(nodes[1].getDependencies(), [nodes[0]]);
+      assert.deepEqual(nodes[2].getDependencies(), [nodes[0]]);
+      assert.deepEqual(nodes[3].getDependencies(), [nodes[1], nodes[2]]);
+    });
+
+    it('should link up script initiators only when timing is valid', () => {
+      const request1 = createRequest(1, '1', 0);
+      const request2 = createRequest(2, '2', 500);
+      const request3 = createRequest(3, '3', 500);
+      const request4 = createRequest(4, '4', 20);
       request4.initiator = {
         type: 'script',
         stack: {callFrames: [{url: '2'}], parent: {parent: {callFrames: [{url: '3'}]}}},
@@ -480,8 +509,89 @@ describe('PageDependencyGraph computed artifact:', () => {
       assert.deepEqual(nodes[0].getDependencies(), []);
       assert.deepEqual(nodes[1].getDependencies(), [nodes[0]]);
       assert.deepEqual(nodes[2].getDependencies(), [nodes[0]]);
-      assert.deepEqual(nodes[3].getDependencies(), [nodes[1], nodes[2]]);
+      assert.deepEqual(nodes[3].getDependencies(), [nodes[0]]);
     });
+
+    it('should link up script initiators with prefetch requests', () => {
+      const request1 = createRequest(1, 'a.com/1', 0);
+      const request2Prefetch = createRequest(2, 'a.com/js', 5);
+      const request2Fetch = createRequest(3, 'a.com/js', 10);
+      const request3 = createRequest(4, 'a.com/4', 20);
+      // Set the initiator to an ambiguous URL (there are 2 requests for a.com/js)
+      request3.initiator = {
+        type: 'script',
+        stack: {callFrames: [{url: 'a.com/js'}], parent: {parent: {callFrames: [{url: 'js'}]}}},
+      };
+      // Set the initiatorRequest that it should fallback to.
+      request3.initiatorRequest = request2Fetch;
+      const networkRecords = [request1, request2Prefetch, request2Fetch, request3];
+
+      addTaskEvents(0, 0, []);
+
+      const graph = PageDependencyGraph.createGraph(traceOfTab, networkRecords);
+      const nodes = [];
+      graph.traverse(node => nodes.push(node));
+
+      assert.equal(nodes.length, 4);
+      assert.deepEqual(nodes.map(node => node.id), [1, 2, 3, 4]);
+      assert.deepEqual(nodes[0].getDependencies(), []);
+      assert.deepEqual(nodes[1].getDependencies(), [nodes[0]]);
+      assert.deepEqual(nodes[2].getDependencies(), [nodes[0]]);
+      assert.deepEqual(nodes[3].getDependencies(), [nodes[2]]);
+    });
+
+    it('should not link up initiators with circular dependencies', () => {
+      const rootRequest = createRequest(1, 'a.com', 0);
+      // jsRequest1 initiated by jsRequest2
+      //              *AND*
+      // jsRequest2 initiated by jsRequest1
+      const jsRequest1 = createRequest(2, 'a.com/js1', 1, {url: 'a.com/js2'});
+      const jsRequest2 = createRequest(3, 'a.com/js2', 1, {url: 'a.com/js1'});
+      const networkRecords = [rootRequest, jsRequest1, jsRequest2];
+
+      addTaskEvents(0, 0, []);
+
+      const graph = PageDependencyGraph.createGraph(traceOfTab, networkRecords);
+      const nodes = [];
+      graph.traverse(node => nodes.push(node));
+      nodes.sort((a, b) => a.id - b.id);
+
+      assert.equal(nodes.length, 3);
+      assert.deepEqual(nodes.map(node => node.id), [1, 2, 3]);
+      assert.deepEqual(nodes[0].getDependencies(), []);
+      // We don't know which of the initiators to trust in a cycle, so for now we
+      // trust the earliest one (mostly because it's simplest).
+      // In the wild so far we've only seen this for self-referential relationships.
+      // If the evidence changes, then feel free to change these expectations :)
+      assert.deepEqual(nodes[1].getDependencies(), [nodes[2]]);
+      assert.deepEqual(nodes[2].getDependencies(), [nodes[0]]);
+    });
+
+    it('should not link up initiatorRequests with circular dependencies', () => {
+      const rootRequest = createRequest(1, 'a.com', 0);
+      // jsRequest1 initiated by jsRequest2
+      //              *AND*
+      // jsRequest2 initiated by jsRequest1
+      const jsRequest1 = createRequest(2, 'a.com/js1', 1);
+      const jsRequest2 = createRequest(3, 'a.com/js2', 1);
+      jsRequest1.initiatorRequest = jsRequest2;
+      jsRequest2.initiatorRequest = jsRequest1;
+      const networkRecords = [rootRequest, jsRequest1, jsRequest2];
+
+      addTaskEvents(0, 0, []);
+
+      const graph = PageDependencyGraph.createGraph(traceOfTab, networkRecords);
+      const nodes = [];
+      graph.traverse(node => nodes.push(node));
+      nodes.sort((a, b) => a.id - b.id);
+
+      assert.equal(nodes.length, 3);
+      assert.deepEqual(nodes.map(node => node.id), [1, 2, 3]);
+      assert.deepEqual(nodes[0].getDependencies(), []);
+      assert.deepEqual(nodes[1].getDependencies(), [nodes[2]]);
+      assert.deepEqual(nodes[2].getDependencies(), [nodes[0]]);
+    });
+
 
     it('should throw when root node is not related to main document', () => {
       const request1 = createRequest(1, '1', 0, null, NetworkRequest.TYPES.Other);

@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2019 Google Inc. All Rights Reserved.
+ * @license Copyright 2019 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -41,7 +41,7 @@ describe('Performance: Resource summary audit', () => {
 
   it('has the correct display value', async () => {
     const result = await ResourceSummaryAudit.audit(artifacts, context);
-    expect(result.displayValue).toBeDisplayString('5 requests • 0 KB');
+    expect(result.displayValue).toBeDisplayString('5 requests • 0 KiB');
   });
 
   it('includes the correct properties for each table item', async () => {
@@ -50,7 +50,7 @@ describe('Performance: Resource summary audit', () => {
     expect(item.resourceType).toEqual('total');
     expect(item.label).toBeDisplayString('Total');
     expect(item.requestCount).toBe(5);
-    expect(item.size).toBe(185);
+    expect(item.transferSize).toBe(185);
   });
 
   it('includes all resource types, regardless of whether page contains them', async () => {
@@ -62,14 +62,14 @@ describe('Performance: Resource summary audit', () => {
     const result = await ResourceSummaryAudit.audit(artifacts, context);
     const fontItem = result.details.items.find(item => item.resourceType === 'font');
     expect(fontItem.requestCount).toBe(0);
-    expect(fontItem.size).toBe(0);
+    expect(fontItem.transferSize).toBe(0);
   });
   describe('third-party resource identification', () => {
     it('is based on root domain if firstPartyHostnames is NOT set', async () => {
       const result = await ResourceSummaryAudit.audit(artifacts, context);
       const thirdParty = result.details.items
         .find(item => item.resourceType === 'third-party');
-      expect(thirdParty.size).toBe(145);
+      expect(thirdParty.transferSize).toBe(145);
       expect(thirdParty.requestCount).toBe(3);
     });
 
@@ -83,7 +83,7 @@ describe('Performance: Resource summary audit', () => {
       const result = await ResourceSummaryAudit.audit(artifacts, context);
       const thirdParty = result.details.items
         .find(item => item.resourceType === 'third-party');
-      expect(thirdParty.size).toBe(120);
+      expect(thirdParty.transferSize).toBe(120);
       expect(thirdParty.requestCount).toBe(2);
     });
   });
@@ -93,7 +93,7 @@ describe('Performance: Resource summary audit', () => {
       const result = await ResourceSummaryAudit.audit(artifacts, context);
       const items = result.details.items;
       items.slice(0, -2).forEach((item, index) => {
-        expect(item.size).toBeGreaterThanOrEqual(items[index + 1].size);
+        expect(item.transferSize).toBeGreaterThanOrEqual(items[index + 1].transferSize);
       });
     });
 
