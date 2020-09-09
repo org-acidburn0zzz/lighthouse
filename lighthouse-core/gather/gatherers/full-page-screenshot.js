@@ -32,7 +32,12 @@ class FullPageScreenshot extends Gatherer {
     const driver = passContext.driver;
     const metrics = await driver.sendCommand('Page.getLayoutMetrics');
     const deviceScaleFactor = await driver.evaluateAsync('window.devicePixelRatio');
-    const width = Math.min(metrics.contentSize.width, maxScreenshotHeight);
+
+    // Emulate page with the same width, and height set to content height.
+    // Easiest way to use the same width is metrics.layoutViewport–there is also
+    // metrics.visualViewport which accounts for zooming.
+    // Note: If the page is zoomed, many assumptions fail.
+    const width = Math.min(metrics.layoutViewport.clientWidth, maxScreenshotHeight);
     const height = Math.min(metrics.contentSize.height, maxScreenshotHeight);
 
     await driver.sendCommand('Emulation.setDeviceMetricsOverride', {
