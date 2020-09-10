@@ -68,18 +68,12 @@ class CriticalRequestChains {
   }
 
   /**
+   * Create a tree of critical requests.
    * @param {LH.Artifacts.NetworkRequest} mainResource
    * @param {LH.Gatherer.Simulation.GraphNode} graph
    * @return {LH.Artifacts.CriticalRequestNode}
    */
   static extractChainUsingLantern(mainResource, graph) {
-    /** @type {Array<LH.Gatherer.Simulation.GraphNetworkNode>} */
-    const criticalNetworkNodes = [];
-    graph.traverse(node => node.type === 'network' &&
-                           CriticalRequestChains.isCritical(node.record, mainResource) &&
-                           criticalNetworkNodes.push(node) );
-
-    // Create a tree of critical requests.
     /** @type {LH.Artifacts.CriticalRequestNode} */
     const rootNode = {};
 
