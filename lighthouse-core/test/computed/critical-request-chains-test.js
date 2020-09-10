@@ -12,6 +12,7 @@ const CriticalRequestChains = require('../../computed/critical-request-chains.js
 const NetworkRequest = require('../../lib/network-request.js');
 const NetworkRecords = require('../../computed/network-records.js');
 const ComputedCrc = require('../../computed/critical-request-chains.js');
+const createTestTrace = require('../create-test-trace.js');
 
 const HIGH = 'High';
 const VERY_HIGH = 'VeryHigh';
@@ -49,14 +50,14 @@ function replaceChain(chains, networkRecords) {
 
 describe('CriticalRequestChain gatherer: extractChain function', () => {
   it('returns correct data for chain from a devtoolsLog', () => {
+    const trace = createTestTrace({topLevelTasks: [{ts: 0}]});
     const wikiDevtoolsLog = require('../fixtures/wikipedia-redirect.devtoolslog.json');
     const wikiChains = require('../fixtures/wikipedia-redirect.critical-request-chains.json');
     const URL = {finalUrl: 'https://en.m.wikipedia.org/wiki/Main_Page'};
 
     const context = {computedCache: new Map()};
     const networkPromise = NetworkRecords.request(wikiDevtoolsLog, context);
-    const CRCPromise = ComputedCrc.request({devtoolsLog: wikiDevtoolsLog,
-      URL}, context);
+    const CRCPromise = ComputedCrc.request({trace, devtoolsLog: wikiDevtoolsLog, URL}, context);
     return Promise.all([CRCPromise, networkPromise]).then(([chains, networkRecords]) => {
       // set all network requests based on requestid
       replaceChain(wikiChains, networkRecords);

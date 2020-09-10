@@ -9,6 +9,7 @@ const makeComputedArtifact = require('./computed-artifact.js');
 const NetworkRequest = require('../lib/network-request.js');
 const NetworkRecords = require('./network-records.js');
 const MainResource = require('./main-resource.js');
+const PageDependencyGraph = require('./page-dependency-graph.js');
 
 class CriticalRequestChains {
   /**
@@ -64,6 +65,53 @@ class CriticalRequestChains {
     if (!request.initiatorRequest) return false;
 
     return ['VeryHigh', 'High', 'Medium'].includes(request.priority);
+  }
+
+  /**
+   * @param {LH.Artifacts.NetworkRequest} mainResource
+   * @param {LH.Gatherer.Simulation.GraphNode} graph
+   * @return {LH.Artifacts.CriticalRequestNode}
+   */
+  static extractChainUsingLantern(mainResource, graph) {
+    /** @type {Array<LH.Gatherer.Simulation.GraphNetworkNode>} */
+    const criticalNetworkNodes = [];
+    graph.traverse(node => node.type === 'network' &&
+                           CriticalRequestChains.isCritical(node.record, mainResource) &&
+                           criticalNetworkNodes.push(node) );
+
+    // Create a tree of critical requests.
+    /** @type {LH.Artifacts.CriticalRequestNode} */
+    const rootNode = {};
+
+    /**
+     * @param {LH.Gatherer.Simulation.GraphNetworkNode[]} path
+     */
+    function addChain(path) {
+      let currentNode = rootNode;
+
+      for (const node of path.reverse()) {
+        if (!currentNode[node.id]) {
+          currentNode[node.id] = {
+            request: node.record,
+            children: {},
+          };
+        }
+
+        currentNode = currentNode[node.id].children;
+      }
+    }
+
+    graph.traverse((node, traversalPath) => {
+      if (node.type !== 'network') return;
+      if (!CriticalRequestChains.isCritical(node.record, mainResource)) return;
+
+      const networkPath = traversalPath
+        .filter(/** @return {initiator is LH.Gatherer.Simulation.GraphNetworkNode} */
+          initiator => initiator.type === 'network');
+      addChain(networkPath);
+    });
+
+    return rootNode;
   }
 
   /**
@@ -158,17 +206,39 @@ class CriticalRequestChains {
   }
 
   /**
-   * @param {{URL: LH.Artifacts['URL'], devtoolsLog: LH.DevtoolsLog}} data
+   * @param {{URL: LH.Artifacts['URL'], devtoolsLog: LH.DevtoolsLog, trace: LH.Trace}} data
    * @param {LH.Audit.Context} context
    * @return {Promise<LH.Artifacts.CriticalRequestNode>}
    */
   static async compute_(data, context) {
-    const [networkRecords, mainResource] = await Promise.all([
+    const [networkRecords, mainResource, graph] = await Promise.all([
       NetworkRecords.request(data.devtoolsLog, context),
       MainResource.request(data, context),
+      PageDependencyGraph.request(data, context),
     ]);
 
-    return CriticalRequestChains.extractChain(networkRecords, mainResource);
+    // debugging.
+    const a = await CriticalRequestChains.extractChain(networkRecords, mainResource);
+    const b = await CriticalRequestChains.extractChainUsingLantern(mainResource, graph);
+
+    function convert(c) {
+      c = {...c};
+
+      for (const [key, value] of Object.entries(c)) {
+        c[key] = {
+          request: {
+            url: value.request.url,
+          },
+          children: convert(value.children),
+        };
+      }
+
+      return c;
+    }
+    // console.log('a =======', JSON.stringify(convert(a), null, 2));
+    // console.log('b =======', JSON.stringify(convert(b), null, 2));
+
+    return b;
   }
 }
 
