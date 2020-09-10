@@ -41,6 +41,7 @@ function createMockDriver({contentSize, screenSize, screenshotData}) {
       if (method === 'Page.getLayoutMetrics') {
         return {
           contentSize,
+          // See comment within _takeScreenshot() implementation
           layoutViewport: {clientWidth: contentSize.width, clientHeight: contentSize.height},
         };
       }
