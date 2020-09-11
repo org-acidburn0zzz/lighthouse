@@ -83,7 +83,7 @@ class CriticalRequestChains {
     function addChain(path) {
       let currentNode = rootNode;
 
-      for (const node of path.reverse()) {
+      for (const node of path) {
         if (!currentNode[node.id]) {
           currentNode[node.id] = {
             request: node.record,
@@ -100,8 +100,13 @@ class CriticalRequestChains {
       if (!CriticalRequestChains.isCritical(node.record, mainResource)) return;
 
       const networkPath = traversalPath
-        .filter(/** @return {initiator is LH.Gatherer.Simulation.GraphNetworkNode} */
-          initiator => initiator.type === 'network');
+        .filter(/** @return {n is LH.Gatherer.Simulation.GraphNetworkNode} */
+          n => n.type === 'network')
+        .reverse();
+
+      // Ignore if a node somehow doesn't have an initiator (ignoring root node).
+      if (networkPath.slice(1).some(n => !n.record.initiatorRequest)) return;
+
       addChain(networkPath);
     });
 
@@ -210,6 +215,7 @@ class CriticalRequestChains {
       MainResource.request(data, context),
       PageDependencyGraph.request(data, context),
     ]);
+
 
     // debugging.
     const a = await CriticalRequestChains.extractChain(networkRecords, mainResource);
