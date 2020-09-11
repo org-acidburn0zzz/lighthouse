@@ -113,7 +113,6 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
     });
   });
 
-  // TODO!
   it('returns correct data for chain interleaved with non-critical requests', async () => {
     const {networkRecords, criticalChains} = await createChainsFromMockRecords(
       [MEDIUM, HIGH, LOW, MEDIUM, HIGH, VERY_LOW],
