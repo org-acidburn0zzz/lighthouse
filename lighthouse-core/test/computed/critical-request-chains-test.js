@@ -21,7 +21,7 @@ const MEDIUM = 'Medium';
 const LOW = 'Low';
 const VERY_LOW = 'VeryLow';
 
-async function createChainsFromMockRecords(prioritiesList, edges, extrasFn) {
+async function createChainsFromMockRecords(prioritiesList, edges, setExtrasFn) {
   const networkRecords = prioritiesList.map((priority, index) =>
     ({requestId: index.toString(),
       url: 'https://www.example.com/' + index,
@@ -44,7 +44,7 @@ async function createChainsFromMockRecords(prioritiesList, edges, extrasFn) {
     };
   });
 
-  if (extrasFn) extrasFn(networkRecords);
+  if (setExtrasFn) setExtrasFn(networkRecords);
 
   const trace = createTestTrace({topLevelTasks: [{ts: 0}]});
   const URL = {finalUrl: networkRecords[0].url};
@@ -70,9 +70,9 @@ function replaceChain(chains, networkRecords) {
 
 describe('CriticalRequestChain gatherer: extractChain function', () => {
   it('returns correct data for chain from a devtoolsLog', () => {
-    const trace = createTestTrace({topLevelTasks: [{ts: 0}]});
-    const wikiDevtoolsLog = require('../fixtures/wikipedia-redirect.devtoolslog.json');
-    const wikiChains = require('../fixtures/wikipedia-redirect.critical-request-chains.json');
+    const trace = require('../fixtures/traces/lcp-m78.json');
+    const wikiDevtoolsLog = require('../fixtures/traces/lcp-m78.devtools.log.json');
+    const expectedChains = require('../fixtures/lcp-m78.critical-request-chains.json');
     const URL = {finalUrl: 'https://en.m.wikipedia.org/wiki/Main_Page'};
 
     const context = {computedCache: new Map()};
@@ -80,8 +80,8 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
     const CRCPromise = ComputedCrc.request({trace, devtoolsLog: wikiDevtoolsLog, URL}, context);
     return Promise.all([CRCPromise, networkPromise]).then(([chains, networkRecords]) => {
       // set all network requests based on requestid
-      replaceChain(wikiChains, networkRecords);
-      assert.deepEqual(chains, wikiChains);
+      replaceChain(expectedChains, networkRecords);
+      assert.deepEqual(chains, expectedChains);
     });
   });
 
@@ -184,15 +184,6 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
     );
     assert.deepEqual(criticalChains, {0: {request: networkRecords[0], children: {}}});
   });
-
-  // ???
-  // it('returns empty chain list when no request whatsoever', async () => {
-  //   const {criticalChains} = await createChainsFromMockRecords(
-  //     [],
-  //     []
-  //   );
-  //   assert.deepEqual(criticalChains, {a:1});
-  // });
 
   it('returns correct data on a random big graph', async () => {
     const {networkRecords, criticalChains} = await createChainsFromMockRecords(
