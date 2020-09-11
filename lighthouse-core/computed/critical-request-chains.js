@@ -95,7 +95,20 @@ class CriticalRequestChains {
       }
     }
 
+    // TODO: is this needed?
+    const seenNodes = new Set();
+    /**
+     * @param {LH.Gatherer.Simulation.GraphNode} node
+     */
+    function getNextNodes(node) {
+      return node.getDependents().filter(n => {
+        const hasSeenAllDependants = n.getDependencies().every(d => seenNodes.has(d));
+        return hasSeenAllDependants;
+      });
+    }
+
     graph.traverse((node, traversalPath) => {
+      seenNodes.add(node);
       if (node.type !== 'network') return;
       if (!CriticalRequestChains.isCritical(node.record, mainResource)) return;
 
@@ -109,7 +122,7 @@ class CriticalRequestChains {
         !CriticalRequestChains.isCritical(n.record, mainResource))) return;
 
       addChain(networkPath);
-    });
+    }, getNextNodes);
 
     return rootNode;
   }
@@ -222,6 +235,7 @@ class CriticalRequestChains {
     const a = await CriticalRequestChains.extractChain(networkRecords, mainResource);
     const b = await CriticalRequestChains.extractChainUsingLantern(mainResource, graph);
 
+    // @ts-ignore
     function convert(c) {
       c = {...c};
 

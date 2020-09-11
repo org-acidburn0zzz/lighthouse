@@ -236,7 +236,7 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
   });
 
   // TODO need help
-  it.skip('handles redirects', async () => {
+  it('handles redirects', async () => {
     const {networkRecords, criticalChains} = await createChainsFromMockRecords(
       [HIGH, HIGH, HIGH, HIGH],
       [[0, 1], [1, 2], [1, 3]],
