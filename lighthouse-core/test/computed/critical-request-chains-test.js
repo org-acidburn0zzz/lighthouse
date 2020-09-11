@@ -13,6 +13,7 @@ const NetworkRequest = require('../../lib/network-request.js');
 const NetworkRecords = require('../../computed/network-records.js');
 const ComputedCrc = require('../../computed/critical-request-chains.js');
 const createTestTrace = require('../create-test-trace.js');
+const networkRecordsToDevtoolsLog = require('../network-records-to-devtools-log.js');
 
 const HIGH = 'High';
 const VERY_HIGH = 'VeryHigh';
@@ -23,18 +24,24 @@ const VERY_LOW = 'VeryLow';
 function mockTracingData(prioritiesList, edges) {
   const networkRecords = prioritiesList.map((priority, index) =>
     ({requestId: index.toString(),
-      resourceType: 'fake',
+      url: 'https://www.example.com/' + index,
+      resourceType: index === 0 ? 'Document' : 'Stylesheet',
       frameId: 1,
       finished: true,
       priority,
-      initiatorRequest: null,
+      initiator: null,
       statusCode: 200,
+      startTime: index,
+      responseReceivedTime: index + 0.5,
     }));
 
   // add mock initiator information
   edges.forEach(edge => {
-    const initiator = networkRecords[edge[0]];
-    networkRecords[edge[1]].initiatorRequest = initiator;
+    const initiatorRequest = networkRecords[edge[0]];
+    networkRecords[edge[1]].initiator = {
+      type: 'parser',
+      url: initiatorRequest.url,
+    };
   });
 
   return networkRecords;
@@ -65,13 +72,19 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
     });
   });
 
-  it('returns correct data for chain of four critical requests', () => {
+  it.only('returns correct data for chain of four critical requests', async () => {
+    const trace = createTestTrace({topLevelTasks: [{ts: 0}]});
     const networkRecords = mockTracingData(
       [HIGH, MEDIUM, VERY_HIGH, HIGH],
       [[0, 1], [1, 2], [2, 3]]
     );
-    const mainResource = networkRecords[0];
-    const criticalChains = CriticalRequestChains.extractChain(networkRecords, mainResource);
+    const URL = {finalUrl: networkRecords[0].url};
+    const devtoolsLog = networkRecordsToDevtoolsLog(networkRecords, {skipVerification: true});
+
+    const context = {computedCache: new Map()};
+    const criticalChains = await CriticalRequestChains.request({URL, trace, devtoolsLog}, context);
+
+    replaceChain(criticalChains, networkRecords);
     assert.deepEqual(criticalChains, {
       0: {
         request: networkRecords[0],
