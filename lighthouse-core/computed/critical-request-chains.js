@@ -104,8 +104,9 @@ class CriticalRequestChains {
           n => n.type === 'network')
         .reverse();
 
-      // Ignore if a node somehow doesn't have an initiator (ignoring root node).
-      if (networkPath.slice(1).some(n => !n.record.initiatorRequest)) return;
+      // Ignore if some ancestor is not a critical request. Ignores root node.
+      if (networkPath.slice(1).some(n =>
+        !CriticalRequestChains.isCritical(n.record, mainResource))) return;
 
       addChain(networkPath);
     });

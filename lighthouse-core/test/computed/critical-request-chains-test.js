@@ -114,7 +114,7 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
   });
 
   // TODO!
-  it.skip('returns correct data for chain interleaved with non-critical requests', async () => {
+  it('returns correct data for chain interleaved with non-critical requests', async () => {
     const {networkRecords, criticalChains} = await createChainsFromMockRecords(
       [MEDIUM, HIGH, LOW, MEDIUM, HIGH, VERY_LOW],
       [[0, 1], [1, 2], [2, 3], [3, 4]]
@@ -133,8 +133,7 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
   }
   );
 
-  // TODO!
-  it.skip('prunes chains not connected to the root document', async () => {
+  it('prunes chains not connected to the root document', async () => {
     const {networkRecords, criticalChains} = await createChainsFromMockRecords(
       [HIGH, HIGH, HIGH, HIGH],
       [[0, 2], [1, 3]]
@@ -246,14 +245,14 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
     });
   });
 
-  // TODO
+  // TODO need help
   it.skip('handles redirects', async () => {
     const {networkRecords, criticalChains} = await createChainsFromMockRecords(
       [HIGH, HIGH, HIGH, HIGH],
       [[0, 1], [1, 2], [1, 3]],
       networkRecords => {
         // Make a fake redirect
-        networkRecords[1].requestId = '1:redirected.0';
+        networkRecords[1].requestId = '1:redirect';
         networkRecords[2].requestId = '1';
 
         networkRecords[3].requestId = '2';
@@ -273,7 +272,7 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
       0: {
         request: networkRecords[0],
         children: {
-          '1:redirected.0': {
+          '1:redirect': {
             request: networkRecords[1],
             children: {
               1: {
