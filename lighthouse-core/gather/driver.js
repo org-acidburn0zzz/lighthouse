@@ -1445,9 +1445,9 @@ class Driver {
   async clearDataForOrigin(url) {
     const origin = new URL(url).origin;
 
-    // Clear some types of storage
-    // Cookies are not cleared, so the user isn't logged out
-    // indexeddb, websql, and localstorage are not cleared to prevent loss of the user's data
+    // Clear some types of storage.
+    // Cookies are not cleared, so the user isn't logged out.
+    // indexeddb, websql, and localstorage are not cleared to prevent loss of potentially important data.
     //   https://chromedevtools.github.io/debugger-protocol-viewer/tot/Storage/#type-StorageType
     const typesToClear = [
       'appcache',
