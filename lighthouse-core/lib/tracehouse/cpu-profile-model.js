@@ -232,7 +232,6 @@ class CpuProfilerModel {
     const knownTasksEndingNotContained = knownTasksEnding
       .filter(t => !knownTasksStarting.includes(t));
 
-    // if (node.callFrame.functionName === 'window.library.stall') console.log({earliestPossibleTimestamp, latestPossibleTimestamp, knownTasksStartingNotContained});
     let effectiveTimestamp = latestPossibleTimestamp;
     if (knownTasksStartingNotContained.length) {
       // Tasks that started but did not finish take priority. Use the earliest of their timestamps.
