@@ -31,7 +31,7 @@ const UIStrings = {
   'Results may be incomplete.',
   /**
    * @description Warning that important data was not cleared but may have affected the scores of this run.
-   * @example {IndexedDB, Local Storage} importantResources
+   * @example {IndexedDB, Local Storage} locations
    */
   warningData: `{locationCount, plural,
     =1 {There may be important data in this location: {locations}. ` +
