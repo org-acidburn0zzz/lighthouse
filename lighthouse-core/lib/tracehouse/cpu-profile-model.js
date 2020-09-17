@@ -155,19 +155,122 @@ class CpuProfilerModel {
   }
 
   /**
-   * Creates B/E-style trace events from a CpuProfile object created by `collectProfileEvents()`
+   * Finds all the tasks that started or ended (depending on `type`) within the provided time range.
+   * Uses a memory index to remember the place in the array the last invocation left off to avoid
+   * re-traversing the entire array.
    *
+   * @param {Array<{startTime: number, endTime: number}>} knownTasks
+   * @param {{type: 'startTime'|'endTime', lastKnownTaskIndex: number, earliestPossibleTimestamp: number, latestPossibleTimestamp: number}} options
+   */
+  _getTasksInRange(knownTasks, options) {
+    const {type, lastKnownTaskIndex, earliestPossibleTimestamp, latestPossibleTimestamp} = options;
+
+    /** @type {Array<{startTime: number, endTime: number}>} */
+    const matchingTasks = [];
+    for (let i = lastKnownTaskIndex; i < knownTasks.length; i++) {
+      const task = knownTasks[i];
+      // Task is before our range of interest, keep looping.
+      if (task[type] < earliestPossibleTimestamp) continue;
+
+      // Task is after our range of interest, we're done.
+      if (task[type] > latestPossibleTimestamp) {
+        return {tasks: matchingTasks, lastIndex: i};
+      }
+
+      // Task is in our range of interest, add it to our list.
+      matchingTasks.push(task);
+    }
+
+    return {tasks: matchingTasks, lastIndex: knownTasks.length};
+  }
+
+  /**
+   * Given a particular time range and a set of known true tasks, find the correct timestamp to use
+   * for a transition between tasks.
+   *
+   * Because the sampling profiler only provides a *range* of start/stop function boundaries, this
+   * method uses knowledge of a known set of tasks to find the most accurate timestamp for a particular
+   * range. For example, if we know that a function ended between 800ms and 810ms, we can use the
+   * knowledge that a toplevel task ended at 807ms to use 807ms as the correct endtime for this function.
+   *
+   * @param {{earliestPossibleTimestamp: number, latestPossibleTimestamp: number, lastKnownTaskStartTimeIndex: number, lastKnownTaskEndTimeIndex: number, knownTasksByStartTime: Array<{startTime: number, endTime: number}>, knownTasksByEndTime: Array<{startTime: number, endTime: number}>}} data
+   * @return {{timestamp: number, lastStartTimeIndex: number, lastEndTimeIndex: number}}
+   */
+  _findEffectiveTimestamp(data) {
+    const {
+      earliestPossibleTimestamp,
+      latestPossibleTimestamp,
+      knownTasksByStartTime,
+      lastKnownTaskStartTimeIndex,
+      knownTasksByEndTime,
+      lastKnownTaskEndTimeIndex,
+    } = data;
+
+    const {tasks: knownTasksStarting, lastIndex: lastStartTimeIndex} = this._getTasksInRange(
+      knownTasksByStartTime,
+      {
+        type: 'startTime',
+        lastKnownTaskIndex: lastKnownTaskStartTimeIndex,
+        earliestPossibleTimestamp,
+        latestPossibleTimestamp,
+      }
+    );
+
+    const {tasks: knownTasksEnding, lastIndex: lastEndTimeIndex} = this._getTasksInRange(
+      knownTasksByEndTime,
+      {
+        type: 'endTime',
+        lastKnownTaskIndex: lastKnownTaskEndTimeIndex,
+        earliestPossibleTimestamp,
+        latestPossibleTimestamp,
+      }
+    );
+
+    // First, find all the tasks that span *across* (not fully contained within) our ambiguous range.
+    const knownTasksStartingNotContained = knownTasksStarting
+      .filter(t => !knownTasksEnding.includes(t));
+    const knownTasksEndingNotContained = knownTasksEnding
+      .filter(t => !knownTasksStarting.includes(t));
+
+    // if (node.callFrame.functionName === 'window.library.stall') console.log({earliestPossibleTimestamp, latestPossibleTimestamp, knownTasksStartingNotContained});
+    let effectiveTimestamp = latestPossibleTimestamp;
+    if (knownTasksStartingNotContained.length) {
+      // Tasks that started but did not finish take priority. Use the earliest of their timestamps.
+      effectiveTimestamp = Math.min(...knownTasksStartingNotContained.map(t => t.startTime));
+    } else if (knownTasksEndingNotContained.length) {
+      // Tasks that ended but did not start take next priority. Use the latest of their timestamps.
+      effectiveTimestamp = Math.max(...knownTasksEndingNotContained.map(t => t.endTime));
+    }
+
+    return {timestamp: effectiveTimestamp, lastStartTimeIndex, lastEndTimeIndex};
+  }
+
+  /**
+   * Creates B/E-style trace events from a CpuProfile object created by `collectProfileEvents()`.
+   * An optional set of tasks can be passed in to refine the start/end times.
+   *
+   * With the sampling profiler we know that a function started/ended *sometime between* two points,
+   * but not exactly when. Using the information from other tasks gives us more information to be
+   * more precise with timings and allows us to create a valid task tree later on.
+   *
+   * @param {Array<LH.Artifacts.TaskNode>} [knownTasks]
    * @return {Array<LH.TraceEvent>}
    */
-  createStartEndEvents() {
+  createStartEndEvents(knownTasks = []) {
     const profile = this._profile;
     const length = profile.samples.length;
     if (profile.timeDeltas.length !== length) throw new Error(`Invalid CPU profile length`);
 
+    const knownTasksByStartTime = knownTasks.slice().sort((a, b) => a.startTime - b.startTime);
+    const knownTasksByEndTime = knownTasks.slice().sort((a, b) => a.endTime - b.endTime);
+
     /** @type {Array<LH.TraceEvent>} */
     const events = [];
 
-    let timestamp = profile.startTime;
+    let profilerTimestamp = profile.startTime;
+    let lastEffectiveTimestamp = profilerTimestamp;
+    let lastKnownTaskStartTimeIndex = 0;
+    let lastKnownTaskEndTimeIndex = 0;
     /** @type {Array<number>} */
     let lastActiveNodeIds = [];
     for (let i = 0; i < profile.samples.length; i++) {
@@ -176,16 +279,38 @@ class CpuProfilerModel {
       const node = this._nodesById.get(nodeId);
       if (!node) throw new Error(`Missing node ${nodeId}`);
 
-      timestamp += timeDelta;
+
+      const {
+        timestamp: effectiveTimestamp,
+        lastStartTimeIndex,
+        lastEndTimeIndex,
+      } = this._findEffectiveTimestamp({
+        earliestPossibleTimestamp: lastEffectiveTimestamp,
+        latestPossibleTimestamp: profilerTimestamp + timeDelta,
+        lastKnownTaskStartTimeIndex,
+        lastKnownTaskEndTimeIndex,
+        knownTasksByStartTime,
+        knownTasksByEndTime,
+      });
+
+      profilerTimestamp += timeDelta;
+      lastEffectiveTimestamp = effectiveTimestamp;
+      lastKnownTaskStartTimeIndex = lastStartTimeIndex;
+      lastKnownTaskEndTimeIndex = lastEndTimeIndex;
+
       const activeNodeIds = this._getActiveNodeIds(nodeId);
       events.push(
-        ...this._createStartEndEventsForTransition(timestamp, lastActiveNodeIds, activeNodeIds)
+        ...this._createStartEndEventsForTransition(
+          effectiveTimestamp,
+          lastActiveNodeIds,
+          activeNodeIds
+        )
       );
       lastActiveNodeIds = activeNodeIds;
     }
 
     events.push(
-      ...this._createStartEndEventsForTransition(timestamp, lastActiveNodeIds, [])
+      ...this._createStartEndEventsForTransition(profilerTimestamp, lastActiveNodeIds, [])
     );
 
     return events;
@@ -195,11 +320,12 @@ class CpuProfilerModel {
    * Creates B/E-style trace events from a CpuProfile object created by `collectProfileEvents()`
    *
    * @param {CpuProfile} profile
+   * @param {Array<LH.Artifacts.TaskNode>} tasks
    * @return {Array<LH.TraceEvent>}
    */
-  static createStartEndEvents(profile) {
+  static createStartEndEvents(profile, tasks) {
     const model = new CpuProfilerModel(profile);
-    return model.createStartEndEvents();
+    return model.createStartEndEvents(tasks);
   }
 
   /**

@@ -65,6 +65,40 @@ describe('CPU Profiler Model', () => {
       ]);
     });
 
+    it('should create events while aware of other tasks', () => {
+      const ts = x => 9e6 + x;
+
+      // With the sampling profiler we know that Baz and Foo ended *sometime between* 17e3 and 18e3.
+      // We want to make sure when additional task information is present, we refine the end time.
+      const tasks = [
+        // The RunTask at the toplevel, should move start time of Foo to 80e2 and end time to 175e2
+        {startTime: ts(80e2), endTime: ts(175e2)},
+        // The EvaluateScript at the 2nd level, should not affect anything.
+        {startTime: ts(90e2), endTime: ts(174e2)},
+        // A small task inside Baz, should move the start time of Baz to 125e2.
+        {startTime: ts(125e2), endTime: ts(134e2)},
+        // A small task inside Foo, should move the end time of Bar to 157e2, start time of Baz to 168e2.
+        {startTime: ts(157e2), endTime: ts(168e2)},
+      ];
+
+      const events = CpuProfilerModel.createStartEndEvents(profile, tasks);
+
+      expect(events).toMatchObject([
+        {ph: 'B', ts: ts(80e2), args: {data: {callFrame: {functionName: '(root)'}}}},
+        {ph: 'B', ts: ts(80e2), args: {data: {callFrame: {functionName: '(program)'}}}},
+        {ph: 'B', ts: ts(80e2), args: {data: {callFrame: {functionName: 'Foo'}}}},
+        {ph: 'B', ts: ts(120e2), args: {data: {callFrame: {functionName: 'Bar'}}}},
+        {ph: 'B', ts: ts(125e2), args: {data: {callFrame: {functionName: 'Baz'}}}},
+        {ph: 'E', ts: ts(134e2), args: {data: {callFrame: {functionName: 'Baz'}}}},
+        {ph: 'E', ts: ts(157e2), args: {data: {callFrame: {functionName: 'Bar'}}}},
+        {ph: 'B', ts: ts(168e2), args: {data: {callFrame: {functionName: 'Baz'}}}},
+        {ph: 'E', ts: ts(175e2), args: {data: {callFrame: {functionName: 'Baz'}}}},
+        {ph: 'E', ts: ts(175e2), args: {data: {callFrame: {functionName: 'Foo'}}}},
+        {ph: 'E', ts: ts(190e2), args: {data: {callFrame: {functionName: '(program)'}}}},
+        {ph: 'E', ts: ts(190e2), args: {data: {callFrame: {functionName: '(root)'}}}},
+      ]);
+    });
+
     it('should create main-thread-task parseable events', () => {
       const ts = x => 9e6 + x;
       const events = CpuProfilerModel.createStartEndEvents(profile);
