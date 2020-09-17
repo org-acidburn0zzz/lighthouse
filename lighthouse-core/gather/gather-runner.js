@@ -29,6 +29,16 @@ const UIStrings = {
    */
   warningTimeout: 'The page loaded too slowly to finish within the time limit. ' +
   'Results may be incomplete.',
+  /**
+   * @description Warning that important data was not cleared but may have affected the scores of this run.
+   * @example {IndexedDB, Local Storage} importantResources
+   */
+  warningData: `{locationCount, plural,
+    =1 {There may be important data in this location: {locations}. ` +
+      `Audit this page in an incognito window to prevent the resources from affecting your scores.}
+    other {There may be important data in these locations: {locations}. ` +
+      `Audit this page in an incognito window to prevent the resources from affecting your scores.}
+  }`,
 };
 
 const str_ = i18n.createMessageInstanceIdFn(__filename, UIStrings);
@@ -105,9 +115,10 @@ class GatherRunner {
   /**
    * @param {Driver} driver
    * @param {{requestedUrl: string, settings: LH.Config.Settings}} options
+   * @param {string[]} LighthouseRunWarnings
    * @return {Promise<void>}
    */
-  static async setupDriver(driver, options) {
+  static async setupDriver(driver, options, LighthouseRunWarnings) {
     const status = {msg: 'Initializing…', id: 'lh:gather:setupDriver'};
     log.time(status);
     const resetStorage = !options.settings.disableStorageReset;
@@ -119,7 +130,16 @@ class GatherRunner {
     await driver.registerPerformanceObserver();
     await driver.dismissJavaScriptDialogs();
     await driver.registerRequestIdleCallbackWrap(options.settings);
-    if (resetStorage) await driver.clearDataForOrigin(options.requestedUrl);
+    if (resetStorage) {
+      const locations = await driver.getImportantLocationsNotCleared(options.requestedUrl);
+      if (locations.length) {
+        LighthouseRunWarnings.push(str_(
+          UIStrings.warningData,
+          {locations: locations.join(', '), locationCount: locations.length}
+        ));
+      }
+      await driver.clearDataForOrigin(options.requestedUrl);
+    }
     log.timeEnd(status);
   }
 
@@ -654,7 +674,7 @@ class GatherRunner {
       const baseArtifacts = await GatherRunner.initializeBaseArtifacts(options);
       baseArtifacts.BenchmarkIndex = await options.driver.getBenchmarkIndex();
 
-      await GatherRunner.setupDriver(driver, options);
+      await GatherRunner.setupDriver(driver, options, baseArtifacts.LighthouseRunWarnings);
 
       let isFirstPass = true;
       for (const passConfig of passConfigs) {

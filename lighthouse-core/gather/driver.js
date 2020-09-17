@@ -1477,6 +1477,35 @@ class Driver {
   }
 
   /**
+   * @param {string} url
+   * @return {Promise<string[]>}
+   */
+  async getImportantLocationsNotCleared(url) {
+    try {
+      const usageData = await this.sendCommand('Storage.getUsageAndQuota', {
+        origin: url,
+      });
+      const locations = usageData.usageBreakdown.filter(usage => usage.usage)
+        .map(usage => {
+          switch (usage.storageType) {
+            case 'local_storage':
+              return 'Local Storage';
+            case 'indexeddb':
+              return 'IndexedDB';
+            case 'websql':
+              return 'Web SQL';
+            default:
+              return '';
+          }
+        })
+        .filter(resourceString => resourceString);
+      return locations;
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  /**
    * Cache native functions/objects inside window
    * so we are sure polyfills do not overwrite the native implementations
    * @return {Promise<void>}

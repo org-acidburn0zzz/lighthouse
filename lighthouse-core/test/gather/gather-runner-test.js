@@ -132,7 +132,8 @@ function resetDefaultMockResponses() {
     .mockResponse('Network.setExtraHTTPHeaders')
     .mockResponse('Network.setUserAgentOverride')
     .mockResponse('Page.enable')
-    .mockResponse('ServiceWorker.enable');
+    .mockResponse('ServiceWorker.enable')
+    .mockResponse('Storage.getUsageAndQuota', {usageBreakdown: []});
 }
 
 beforeEach(() => {
@@ -415,11 +416,47 @@ describe('GatherRunner', function() {
       clearDataForOrigin: createCheck('calledClearStorage'),
       blockUrlPatterns: asyncFunc,
       setExtraHTTPHeaders: asyncFunc,
+      getImportantLocationsNotCleared: () => Promise.resolve(''),
     };
 
     return GatherRunner.setupDriver(driver, {settings: {}}).then(_ => {
       assert.equal(tests.calledCleanBrowserCaches, false);
       assert.equal(tests.calledClearStorage, true);
+    });
+  });
+
+  it('warns if important data not cleared may impact performance', () => {
+    const asyncFunc = () => Promise.resolve();
+    driver.assertNoSameOriginServiceWorkerClients = asyncFunc;
+    driver.beginEmulation = asyncFunc;
+    driver.enableRuntimeEvents = asyncFunc;
+    driver.enableAsyncStacks = asyncFunc;
+    driver.cacheNatives = asyncFunc;
+    driver.registerPerformanceObserver = asyncFunc;
+    driver.dismissJavaScriptDialogs = asyncFunc;
+    driver.registerRequestIdleCallbackWrap = asyncFunc;
+    driver.clearDataForOrigin = asyncFunc;
+
+    connectionStub.sendCommand = createMockSendCommandFn()
+      .mockResponse('Storage.getUsageAndQuota', {usageBreakdown: [
+        {storageType: 'local_storage', usage: 5},
+        {storageType: 'indexeddb', usage: 5},
+        {storageType: 'websql', usage: 0},
+        {storageType: 'appcache', usage: 5},
+        {storageType: 'cookies', usage: 5},
+        {storageType: 'file_systems', usage: 5},
+        {storageType: 'shader_cache', usage: 5},
+        {storageType: 'service_workers', usage: 5},
+        {storageType: 'cache_storage', usage: 0},
+      ]});
+    /** @type {string[]} */
+    const LighthouseRunWarnings = [];
+    GatherRunner.setupDriver(driver, {settings: {}}, LighthouseRunWarnings).then(_ => {
+      expect(LighthouseRunWarnings[0]).toBeDisplayString(new RegExp(
+        'There may be important data in these locations: Local Storage, IndexedDB. ' +
+        'Audit this page in an incognito window to prevent ' +
+        'the resources from affecting your scores.'
+      ));
     });
   });
 
