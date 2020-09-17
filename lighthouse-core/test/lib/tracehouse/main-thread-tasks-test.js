@@ -827,12 +827,13 @@ describe('Main Thread Tasks', () => {
       const tasks = run({traceEvents});
       const taskTreeAsString = MainThreadTasks.printTaskTreeToDebugString(tasks, {printWidth: 50});
       expect(taskTreeAsString).toMatchInlineSnapshot(`
-        "Total Duration: 100ms
+        "Trace Duration: 100ms
+        Range: [0, 100]
         █ = 2.00ms
 
         █████████████████████████A█████████████████████████
-          ████████████B█████████████  ███████D████████
-             ███████C████████
+          ████████████B█████████████  ███████D████████    
+             ███████C████████                             
 
         A = TaskA
         B = TaskB
