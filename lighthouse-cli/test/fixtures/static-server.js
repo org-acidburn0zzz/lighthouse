@@ -188,6 +188,13 @@ class Server {
     }
 
     function sendRedirect(url) {
+      if (url.split('').some(char => char.charCodeAt(0) > 256)) {
+        response.writeHead(500);
+        response.write(`Invalid redirect URL: ${url}`);
+        response.end();
+        return;
+      }
+
       const headers = {
         Location: url,
       };
