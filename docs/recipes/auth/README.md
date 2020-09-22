@@ -116,7 +116,7 @@ node example-lh-auth.js # login via puppeteer and run lighthouse
 
 ### [`page.setCookie`](https://github.com/GoogleChrome/puppeteer/blob/master/docs/api.md#pagesetcookiecookies)
 
-**NOTE:** We strongly recommend your tests use the above login flow. Only directly set the token like this as a last resort.
+**NOTE:** We strongly recommend your tests use the form-based login flow above instead. Only directly set the token like this as a last resort.
 
 If you don't have user credentials to login but you do have direct access to a token for authentication, you can instead directly set a cookie.
 
