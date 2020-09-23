@@ -20,6 +20,7 @@ const {join} = require('path');
 
 const directory = process.argv[2];
 const audit = process.argv[3];
+const saveDir = process.argv[4];
 if (!directory) throw new Error('No directory provided\nUsage: $0 <lhr directory> <audit id>');
 
 if (!audit) throw new Error('No audit provided');
@@ -88,4 +89,6 @@ const results = {
   runResults,
 };
 
-writeFileSync('analyze-results.json', JSON.stringify(results, null, 2), 'utf8');
+const resultsString = JSON.stringify(results, null, 2);
+writeFileSync(saveDir + '/analyze-results.json', resultsString, 'utf8');
+console.log(resultsString);
