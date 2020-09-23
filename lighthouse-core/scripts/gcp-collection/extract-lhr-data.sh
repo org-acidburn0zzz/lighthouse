@@ -20,4 +20,4 @@ for f in lhr-data-*.tar.gz; do
 done
 
 cd $DIRNAME
-node analyze-lhr-data.js "$GCP_DATA/data" $1 "$LH_ROOT/.tmp"
+node analyze-lhr-data.js "$GCP_DATA/data" $1 > "$LH_ROOT/.tmp/analyze-results.json"

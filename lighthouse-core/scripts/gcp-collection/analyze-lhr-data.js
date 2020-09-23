@@ -15,12 +15,11 @@
  */
 
 /* eslint-disable no-console */
-const {readdirSync, readFileSync, writeFileSync} = require('fs');
+const {readdirSync, readFileSync} = require('fs');
 const {join} = require('path');
 
 const directory = process.argv[2];
 const audit = process.argv[3];
-const saveDir = process.argv[4];
 if (!directory) throw new Error('No directory provided\nUsage: $0 <lhr directory> <audit id>');
 
 if (!audit) throw new Error('No audit provided');
@@ -47,7 +46,6 @@ for (const dir of urlDirs) {
     if (!run.isDirectory()) throw new Error(`Unexpected directory "${run.name}" encountered`);
 
     const lhrPath = join(path, run.name, 'lhr.json');
-    console.log(lhrPath);
     const data = readFileSync(lhrPath, 'utf8');
 
     /** @type {LH.Result | undefined} */
@@ -89,6 +87,4 @@ const results = {
   runResults,
 };
 
-const resultsString = JSON.stringify(results, null, 2);
-writeFileSync(saveDir + '/analyze-results.json', resultsString, 'utf8');
-console.log(resultsString);
+console.log(JSON.stringify(results, null, 2));
