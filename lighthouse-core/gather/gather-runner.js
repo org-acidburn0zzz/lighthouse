@@ -115,7 +115,7 @@ class GatherRunner {
   /**
    * @param {Driver} driver
    * @param {{requestedUrl: string, settings: LH.Config.Settings}} options
-   * @param {string[]} LighthouseRunWarnings
+   * @param {(string | LH.IcuMessage)[]} LighthouseRunWarnings
    * @return {Promise<void>}
    */
   static async setupDriver(driver, options, LighthouseRunWarnings) {
