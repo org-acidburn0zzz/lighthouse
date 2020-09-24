@@ -913,6 +913,20 @@ describe('.goOnline', () => {
   });
 });
 
+describe('.clearDataForOrigin', () => {
+  it('only clears data from certain locations', async () => {
+    let foundStorageTypes;
+    connectionStub.sendCommand = createMockSendCommandFn()
+      .mockResponse('Storage.clearDataForOrigin', ({storageTypes}) => {
+        foundStorageTypes = storageTypes;
+      });
+    await driver.clearDataForOrigin('https://example.com');
+    expect(foundStorageTypes).toMatchInlineSnapshot(
+      `"appcache,file_systems,shader_cache,service_workers,cache_storage"`
+    );
+  });
+});
+
 describe('Domain.enable/disable State', () => {
   it('dedupes (simple)', async () => {
     connectionStub.sendCommand = createMockSendCommandFn()
