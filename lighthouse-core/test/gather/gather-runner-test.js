@@ -425,7 +425,7 @@ describe('GatherRunner', function() {
     });
   });
 
-  it('warns if important data not cleared may impact performance', () => {
+  it('warns if important data not cleared may impact performance', async () => {
     const asyncFunc = () => Promise.resolve();
     driver.assertNoSameOriginServiceWorkerClients = asyncFunc;
     driver.beginEmulation = asyncFunc;
@@ -449,15 +449,14 @@ describe('GatherRunner', function() {
         {storageType: 'service_workers', usage: 5},
         {storageType: 'cache_storage', usage: 0},
       ]});
-    /** @type {string[]} */
+    /** @type {(string | LH.IcuMessage)[]} */
     const LighthouseRunWarnings = [];
-    GatherRunner.setupDriver(driver, {settings: {}}, LighthouseRunWarnings).then(_ => {
-      expect(LighthouseRunWarnings[0]).toBeDisplayString(new RegExp(
-        'There may be important data in these locations: Local Storage, IndexedDB. ' +
-        'Audit this page in an incognito window to prevent ' +
-        'the resources from affecting your scores.'
-      ));
-    });
+    await GatherRunner.setupDriver(driver, {settings: {}}, LighthouseRunWarnings);
+    expect(LighthouseRunWarnings[0]).toBeDisplayString(new RegExp(
+      'There may be important data in these locations: Local Storage, IndexedDB. ' +
+      'Audit this page in an incognito window to prevent ' +
+      'the resources from affecting your scores.'
+    ));
   });
 
   it('clears the disk & memory cache on a perf run', async () => {
