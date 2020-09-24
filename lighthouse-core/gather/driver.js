@@ -1590,3 +1590,4 @@ class Driver {
 }
 
 module.exports = Driver;
+module.exports.UIStrings = UIStrings;

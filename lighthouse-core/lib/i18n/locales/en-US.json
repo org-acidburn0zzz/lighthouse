@@ -1598,7 +1598,7 @@
   "lighthouse-core/config/default-config.js | seoMobileGroupTitle": {
     "message": "Mobile Friendly"
   },
-  "lighthouse-core/gather/gather-runner.js | warningData": {
+  "lighthouse-core/gather/driver.js | warningData": {
     "message": "{locationCount, plural,\n    =1 {There may be important data in this location: {locations}. Audit this page in an incognito window to prevent the resources from affecting your scores.}\n    other {There may be important data in these locations: {locations}. Audit this page in an incognito window to prevent the resources from affecting your scores.}\n  }"
   },
   "lighthouse-core/gather/gather-runner.js | warningRedirected": {
