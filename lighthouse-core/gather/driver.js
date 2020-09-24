@@ -12,6 +12,7 @@ const LHElement = require('../lib/lh-element.js');
 const LHError = require('../lib/lh-error.js');
 const NetworkRequest = require('../lib/network-request.js');
 const EventEmitter = require('events').EventEmitter;
+const i18n = require('../lib/i18n/i18n.js');
 const URL = require('../lib/url-shim.js');
 const constants = require('../config/constants.js');
 
@@ -23,6 +24,21 @@ const pageFunctions = require('../lib/page-functions.js');
 // Pulled in for Connection type checking.
 // eslint-disable-next-line no-unused-vars
 const Connection = require('./connections/connection.js');
+
+const UIStrings = {
+  /**
+   * @description Warning that important data was not cleared but may have affected the scores of this run.
+   * @example {IndexedDB, Local Storage} locations
+   */
+  warningData: `{locationCount, plural,
+    =1 {There may be important data in this location: {locations}. ` +
+      `Audit this page in an incognito window to prevent the resources from affecting your scores.}
+    other {There may be important data in these locations: {locations}. ` +
+      `Audit this page in an incognito window to prevent the resources from affecting your scores.}
+  }`,
+};
+
+const str_ = i18n.createMessageInstanceIdFn(__filename, UIStrings);
 
 // Controls how long to wait after FCP before continuing
 const DEFAULT_PAUSE_AFTER_FCP = 0;
@@ -1478,9 +1494,9 @@ class Driver {
 
   /**
    * @param {string} url
-   * @return {Promise<string[]>}
+   * @param {(LH.IcuMessage | string)[]} LighthouseRunWarnings
    */
-  async getImportantLocationsNotCleared(url) {
+  async getImportantStorageWarning(url, LighthouseRunWarnings) {
     const usageData = await this.sendCommand('Storage.getUsageAndQuota', {
       origin: url,
     });
@@ -1494,7 +1510,12 @@ class Driver {
       .filter(usage => usage.usage)
       .map(usage => storageTypeNames[usage.storageType] || '')
       .filter(Boolean);
-    return locations;
+    if (locations.length) {
+      LighthouseRunWarnings.push(str_(
+        UIStrings.warningData,
+        {locations: locations.join(', '), locationCount: locations.length}
+      ));
+    }
   }
 
   /**

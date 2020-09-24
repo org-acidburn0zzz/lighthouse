@@ -927,6 +927,50 @@ describe('.clearDataForOrigin', () => {
   });
 });
 
+describe('.getImportantDataWarning', () => {
+  it('properly returns warning', async () => {
+    connectionStub.sendCommand = createMockSendCommandFn()
+      .mockResponse('Storage.getUsageAndQuota', {usageBreakdown: [
+        {storageType: 'local_storage', usage: 5},
+        {storageType: 'indexeddb', usage: 5},
+        {storageType: 'websql', usage: 0},
+        {storageType: 'appcache', usage: 5},
+        {storageType: 'cookies', usage: 5},
+        {storageType: 'file_systems', usage: 5},
+        {storageType: 'shader_cache', usage: 5},
+        {storageType: 'service_workers', usage: 5},
+        {storageType: 'cache_storage', usage: 0},
+      ]});
+    /** @type {(LH.IcuMessage | string)[]} */
+    const LighthouseRunWarnings = [];
+    await driver.getImportantStorageWarning('https://example.com', LighthouseRunWarnings);
+    expect(LighthouseRunWarnings).toHaveLength(1);
+    expect(LighthouseRunWarnings[0]).toBeDisplayString(
+      'There may be important data in these locations: Local Storage, IndexedDB. ' +
+      'Audit this page in an incognito window to prevent the resources from affecting your scores.'
+    );
+  });
+
+  it('only warn for certain locations', async () => {
+    connectionStub.sendCommand = createMockSendCommandFn()
+      .mockResponse('Storage.getUsageAndQuota', {usageBreakdown: [
+        {storageType: 'local_storage', usage: 0},
+        {storageType: 'indexeddb', usage: 0},
+        {storageType: 'websql', usage: 0},
+        {storageType: 'appcache', usage: 5},
+        {storageType: 'cookies', usage: 5},
+        {storageType: 'file_systems', usage: 5},
+        {storageType: 'shader_cache', usage: 5},
+        {storageType: 'service_workers', usage: 5},
+        {storageType: 'cache_storage', usage: 5},
+      ]});
+    /** @type {(LH.IcuMessage | string)[]} */
+    const LighthouseRunWarnings = [];
+    await driver.getImportantStorageWarning('https://example.com', LighthouseRunWarnings);
+    expect(LighthouseRunWarnings).toHaveLength(0);
+  });
+});
+
 describe('Domain.enable/disable State', () => {
   it('dedupes (simple)', async () => {
     connectionStub.sendCommand = createMockSendCommandFn()
