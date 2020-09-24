@@ -1484,20 +1484,16 @@ class Driver {
     const usageData = await this.sendCommand('Storage.getUsageAndQuota', {
       origin: url,
     });
-    const locations = usageData.usageBreakdown.filter(usage => usage.usage)
-      .map(usage => {
-        switch (usage.storageType) {
-          case 'local_storage':
-            return 'Local Storage';
-          case 'indexeddb':
-            return 'IndexedDB';
-          case 'websql':
-            return 'Web SQL';
-          default:
-            return '';
-        }
-      })
-      .filter(resourceString => resourceString);
+    /** @type {Object.<string, string>} */
+    const storageTypeNames = {
+      local_storage: 'Local Storage',
+      indexeddb: 'IndexedDB',
+      websql: 'Web SQL',
+    };
+    const locations = usageData.usageBreakdown
+      .filter(usage => usage.usage)
+      .map(usage => storageTypeNames[usage.storageType] || '')
+      .filter(Boolean);
     return locations;
   }
 
