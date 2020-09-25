@@ -1500,7 +1500,7 @@ class Driver {
     const usageData = await this.sendCommand('Storage.getUsageAndQuota', {
       origin: url,
     });
-    /** @type {Object.<string, string>} */
+    /** @type {Record<string, string>} */
     const storageTypeNames = {
       local_storage: 'Local Storage',
       indexeddb: 'IndexedDB',

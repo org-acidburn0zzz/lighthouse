@@ -921,6 +921,9 @@ describe('.clearDataForOrigin', () => {
         foundStorageTypes = storageTypes;
       });
     await driver.clearDataForOrigin('https://example.com');
+    // Should not see cookies, websql, indexeddb, or local_storage.
+    // Cookies are not cleared to preserve login.
+    // websql, indexeddb, and local_storage are not cleared to preserve important user data.
     expect(foundStorageTypes).toMatchInlineSnapshot(
       `"appcache,file_systems,shader_cache,service_workers,cache_storage"`
     );
